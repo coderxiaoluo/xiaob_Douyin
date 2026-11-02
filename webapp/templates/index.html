@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>抖音采集工作台</title>
-  <link rel="stylesheet" href="/static/app.css?v=create2" />
+  <link rel="stylesheet" href="/static/app.css?v=nav1" />
 </head>
 <body>
   <div class="app">
@@ -14,30 +14,12 @@
         <div class="brand-sub">Workbench</div>
       </div>
       <nav id="moduleNav" class="nav" aria-label="功能模块"></nav>
-      <div class="sidebar-mid">
-        <button type="button" class="nav-config" id="createNavBtn">
-          <span class="nav-label">私信 / 发布</span>
-        </button>
-        <button type="button" class="nav-config" id="archiveNavBtn">
-          <span class="nav-label">本地档案</span>
-          <span class="nav-badge" id="excelCount">0</span>
-        </button>
-      </div>
-      <details class="sidebar-lowfreq" id="sidebarLowfreq">
-        <summary>Agent / 会话</summary>
-        <div class="sidebar-foot">
-          <button type="button" class="nav-config" id="agentNavBtn">
-            <span class="nav-label">Agent 配置</span>
-          </button>
-          <button type="button" class="nav-config" id="configNavBtn">
-            <span class="nav-label">会话配置</span>
-          </button>
-          <div class="session">
-            <span class="dot" id="sessionDot" aria-hidden="true"></span>
-            <span id="sessionText">检测中…</span>
-          </div>
+      <div class="sidebar-foot">
+        <div class="session">
+          <span class="dot" id="sessionDot" aria-hidden="true"></span>
+          <span id="sessionText">检测中…</span>
         </div>
-      </details>
+      </div>
     </aside>
 
     <div class="main">
@@ -572,6 +554,6 @@
       </section>
     </div>
   </div>
-  <script src="/static/app.js?v=create2"></script>
+  <script src="/static/app.js?v=nav1"></script>
 </body>
 </html>

@@ -65,6 +65,7 @@
   let currentKind = "work";
   let viewMode = "work"; // work | config
   let lastWorkUrl = ""; // 评论区发表/回复时回填目标作品
+  let excelCount = 0; // 本地档案数量，导航徽标用
   const actionState = new Map(); // "digg:123" / "collect:123" -> "0" | "1"
 
   function escapeHtml(s) {
@@ -128,22 +129,67 @@
     if (all) all.innerHTML = "";
   }
 
+  function navConfigBtn(id, label, badge) {
+    const badgeHtml = badge === undefined
+      ? ""
+      : `<span class="nav-badge" id="excelCount">${badge}</span>`;
+    return `<button type="button" class="nav-config" id="${id}">
+      <span class="nav-label">${label}</span>${badgeHtml}
+    </button>`;
+  }
+
+  // 工具类导航的 active 与视图保持一致，避免重绘后高亮丢失
+  function markNavActive() {
+    const map = {
+      create: "createNavBtn",
+      archive: "archiveNavBtn",
+      agent: "agentNavBtn",
+      config: "configNavBtn",
+    };
+    const id = map[viewMode];
+    if (id) document.getElementById(id)?.classList.add("active");
+  }
+
   function renderNav() {
     const groups = {};
     modules.forEach((m) => { (groups[m.group] ||= []).push(m); });
-    $("#moduleNav").innerHTML = Object.entries(groups)
+    const moduleHtml = Object.entries(groups)
       .map(([group, items]) => {
         const btns = items
-          .map((m) => `<button type="button" data-id="${m.id}" class="${m.id === currentModule ? "active" : ""}">
+          .map((m) => {
+            const on = viewMode !== "config" && viewMode !== "agent"
+              && viewMode !== "archive" && viewMode !== "create"
+              && m.id === currentModule;
+            return `<button type="button" data-id="${m.id}" class="${on ? "active" : ""}">
             <span class="nav-label">${m.label}</span>
-          </button>`)
+          </button>`;
+          })
           .join("");
         return `<div class="nav-group"><div class="nav-group-title">${group}</div>${btns}</div>`;
       })
       .join("");
+    const toolsHtml = `
+      <div class="nav-group">
+        <div class="nav-group-title">工具</div>
+        ${navConfigBtn("createNavBtn", "私信 / 发布")}
+        ${navConfigBtn("archiveNavBtn", "本地档案", excelCount)}
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Agent / 会话</div>
+        ${navConfigBtn("agentNavBtn", "Agent 配置")}
+        ${navConfigBtn("configNavBtn", "会话配置")}
+      </div>`;
+    $("#moduleNav").innerHTML = moduleHtml + toolsHtml;
     $$("#moduleNav button").forEach((btn) => {
-      btn.addEventListener("click", () => selectModule(btn.dataset.id));
+      btn.addEventListener("click", () => {
+        if (btn.dataset.id) { selectModule(btn.dataset.id); return; }
+        if (btn.id === "createNavBtn") showCreateView();
+        else if (btn.id === "archiveNavBtn") showArchiveView();
+        else if (btn.id === "agentNavBtn") showAgentView();
+        else if (btn.id === "configNavBtn") showConfigView();
+      });
     });
+    markNavActive();
   }
 
   function selectModule(id) {
@@ -183,11 +229,6 @@
     renderNav();
   }
 
-  function openLowfreqNav() {
-    const box = $("#sidebarLowfreq");
-    if (box) box.open = true;
-  }
-
   function showArchiveView() {
     viewMode = "archive";
     hideAllViews();
@@ -210,7 +251,6 @@
     $$("#moduleNav button").forEach((b) => b.classList.remove("active"));
     $("#moduleTitle").textContent = "会话配置";
     $("#moduleDesc").textContent = "Cookie、扫码登录、代理";
-    openLowfreqNav();
     stopLivePoll();
     loadConfig().catch((e) => showCfgMsg(e.message || String(e), false));
   }
@@ -224,7 +264,6 @@
     $$("#moduleNav button").forEach((b) => b.classList.remove("active"));
     $("#moduleTitle").textContent = "Agent 配置";
     $("#moduleDesc").textContent = "填目标 → 开能力 → 预览计划 → 保存（暂不执行）";
-    openLowfreqNav();
     stopLivePoll();
     loadAgent().catch((e) => showAgentMsg(e.message || String(e), false));
   }
@@ -679,7 +718,8 @@
     const files = (data.excels || []).filter(
       (f) => f.name && !String(f.name).startsWith("~$") && !String(f.name).startsWith(".")
     );
-    $("#excelCount").textContent = String(files.length);
+    excelCount = files.length;
+    $("#excelCount").textContent = String(excelCount);
     const countLabel = $("#excelCountLabel");
     if (countLabel) countLabel.textContent = String(files.length);
     const listEl = $("#excelList");
@@ -1155,9 +1195,6 @@
     }
   });
 
-  $("#configNavBtn").addEventListener("click", () => showConfigView());
-  $("#agentNavBtn").addEventListener("click", () => showAgentView());
-  $("#archiveNavBtn")?.addEventListener("click", () => showArchiveView());
   $("#archiveRefreshBtn")?.addEventListener("click", () => {
     refreshStatus().catch((e) => alert(e.message || String(e)));
   });
@@ -1670,7 +1707,6 @@
     }
   }
 
-  $("#createNavBtn")?.addEventListener("click", () => showCreateView());
   $("#mediaRefreshBtn")?.addEventListener("click", () => {
     loadMedia(true).catch((err) => createMsg("mediaMsg", err.message || String(err), false));
   });
