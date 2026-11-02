@@ -1,0 +1,32 @@
+{
+  "enabled": false,
+  "goal": {
+    "category": "",
+    "daily_videos": 1,
+    "funnel": "comment",
+    "brief": ""
+  },
+  "persona": {
+    "tone": "轻松专业",
+    "forbidden": "硬广、保证收益、诱导私下转账、辱骂挑衅"
+  },
+  "tools": {
+    "gen_video": false,
+    "gen_cover": false,
+    "publish_video": false,
+    "comment": false,
+    "hot_reply": false,
+    "dm_reply": false
+  },
+  "quotas": {
+    "max_publish_per_day": 3,
+    "max_comments_per_day": 20,
+    "max_dm_per_day": 10,
+    "min_action_interval_sec": 180
+  },
+  "safety": {
+    "require_manual_confirm": true,
+    "sensitive_word_check": true,
+    "cooldown_after_errors": 3
+  }
+}

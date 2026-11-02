@@ -49,7 +49,28 @@ def handle_work_info(data):
     aweme_id = data['aweme_id']
     nickname = data['author']['nickname']
     author_avatar = data['author']['avatar_thumb']['url_list'][0]
-    video_cover = data['video']['cover']['url_list'][0]
+    def _first_url(*nodes):
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            urls = node.get('url_list') or []
+            for u in urls:
+                if u:
+                    return u
+        return ''
+    video = data.get('video') or {}
+    # 优先非 sign 域名，签名封面在本地代理时更容易 403
+    video_cover = ''
+    for node in (video.get('cover'), video.get('origin_cover'), video.get('dynamic_cover')):
+        urls = (node or {}).get('url_list') or [] if isinstance(node, dict) else []
+        for u in urls:
+            if u and 'douyinpic.com' in u and '-sign.' not in u:
+                video_cover = u
+                break
+        if video_cover:
+            break
+    if not video_cover:
+        video_cover = _first_url(video.get('cover'), video.get('origin_cover'), video.get('dynamic_cover'))
     title = data['desc']
     desc = data['desc']
     admire_count = data['statistics']['admire_count'] if 'admire_count' in data['statistics'] else 0

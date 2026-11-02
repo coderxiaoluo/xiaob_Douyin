@@ -58,6 +58,27 @@ def _live_web_rid(value):
 
 
 
+def _search_list_or_raise(res_json, key, label):
+    """搜索类接口在风控/参数异常时经常没有 list 字段，避免 KeyError 直接崩。"""
+    rows = res_json.get(key) if isinstance(res_json, dict) else None
+    if isinstance(rows, list):
+        return rows
+    status = res_json.get("status_code") if isinstance(res_json, dict) else None
+    msg = ""
+    if isinstance(res_json, dict):
+        msg = res_json.get("status_msg") or res_json.get("message") or res_json.get("msg") or ""
+    # 2483：个人资料/sessionid 仍可能有效，但搜索通道单独要求「搜索可用」登录态。
+    if str(status) == "2483" or (msg and "请先登录" in str(msg)):
+        raise RuntimeError(
+            f"{label}失败（status_code={status} · {msg or '请先登录'}）。"
+            "左下角「会话有效」只说明能取到 uid；搜作品/搜用户另有登录校验，当前 Cookie 未通过。"
+            "请在浏览器打开抖音搜索页并成功搜一次，从该搜索请求重新复制 Cookie 到「会话配置」后重试。"
+        )
+    raise RuntimeError(
+        f"{label}失败（status_code={status}{(' · ' + msg) if msg else ''}，无 {key}）。"
+        "请确认 Cookie 有效、未触发验证，或稍后重试")
+
+
 def check_risk_response(resp):
     """抖音风控拒绝时返回 HTTP 200 + 空 body 或 HTML 挑战页，原因只在响应头里，
     这里翻译成可读异常。直接 `resp.json()` 只会得到毫无信息量的 JSONDecodeError。
@@ -109,6 +130,32 @@ def parse_aweme_id(url: str):
         raise ValueError(f"无法从链接中解析 aweme_id: {url}")
     aweme_id = m.group(1)
     return aweme_id, f'https://www.douyin.com/video/{aweme_id}'
+
+
+def parse_sec_user_id(user_url: str) -> tuple[str, str]:
+    """从用户主页链接取出 sec_user_id，并归一化 referer。
+
+    兼容：
+    - `https://www.douyin.com/user/MS4w…`
+    - 带 query / 尾斜杠 / 锚点
+    - 直接粘贴 `MS4wLjABAAAA…`
+    """
+    text = urllib.parse.unquote((user_url or "").strip())
+    if not text:
+        raise ValueError("用户链接为空")
+    m = re.search(r"/user/([^/?#]+)", text)
+    if m:
+        sec_uid = m.group(1)
+    elif re.fullmatch(r"MS4wLjABAAAA[\w-]+", text):
+        sec_uid = text
+    else:
+        # 旧逻辑兜底：末段，但跳过空末段（尾斜杠）
+        parts = [p for p in text.rstrip("/").split("/") if p]
+        sec_uid = parts[-1].split("?")[0] if parts else ""
+    if not sec_uid or sec_uid in {"user", "www.douyin.com", "douyin.com"}:
+        raise ValueError(f"无法从链接中解析 sec_user_id: {user_url}")
+    referer = f"https://www.douyin.com/user/{sec_uid}"
+    return sec_uid, referer
 
 
 class DouyinAPI:
@@ -164,9 +211,9 @@ class DouyinAPI:
         :return:
         """
         api = f"/aweme/v1/web/aweme/post/"
-        user_id = user_url.split("/")[-1].split("?")[0]
+        user_id, user_referer = parse_sec_user_id(user_url)
         headers = HeaderBuilder().build(HeaderType.GET)
-        headers.set_referer(user_url)
+        headers.set_referer(user_referer)
         headers.with_uifid(auth)
         # 字段与顺序照 2026-08-16 抓包（46 项）。注意几处只能看抓包才知道的细节：
         #   - version_code 是 290100 / 29.1.0，**这个接口特有**，不是主站通用的 170400
@@ -217,7 +264,7 @@ class DouyinAPI:
         params.add_param("downlink", '10')
         params.add_param("effective_type", '4g')
         params.add_param("round_trip_time", '0')
-        params.with_web_id(auth, user_url)
+        params.with_web_id(auth, user_referer)
         params.with_uifid(auth)
         params.add_param("msToken", auth.msToken)
         params.with_a_bogus()
@@ -429,9 +476,14 @@ class DouyinAPI:
         :return: 用户信息.
         """
         api = f"/aweme/v1/web/user/profile/other/"
-        user_id = user_url.split("/")[-1].split("?")[0]
+        user_id, user_referer = parse_sec_user_id(user_url)
+        # 长会话里 msToken 过期时，这个接口常返回 HTTP 200 空体。
+        try:
+            auth.refresh_mstoken()
+        except Exception:
+            pass
         headers = HeaderBuilder().build(HeaderType.GET)
-        headers.set_referer(user_url)
+        headers.set_referer(user_referer)
         headers.with_uifid(auth)
         params = Params()
         params.add_param("device_platform", 'webapp')
@@ -447,7 +499,7 @@ class DouyinAPI:
         # 公共组换 with_platform()：手写那版缺 pc_libra_divert / support_h265 / support_dash，
         # 且 round_trip_time 写死 100（实录是 0）
         params.with_platform(round_trip_time='0')
-        params.with_web_id(auth, user_url)
+        params.with_web_id(auth, user_referer)
         params.with_uifid(auth)
         params.add_param("msToken", auth.msToken)
         params.with_a_bogus()
@@ -455,6 +507,23 @@ class DouyinAPI:
         params.with_verify_fp(auth)
         resp = requests.get(f'{DouyinAPI.douyin_url}{api}', headers=headers.get(), cookies=auth.cookie,
                             params=params.get(), verify=False)
+        # 空体时再刷一次 token 重试，避免 Web 长会话误杀
+        if not (resp.text or "").strip():
+            try:
+                auth.refresh_mstoken()
+                params.add_param("msToken", auth.msToken)
+                # a_bogus / verifyFp 依赖整段 query，必须重算
+                params.params.pop("a_bogus", None)
+                params.params.pop("verifyFp", None)
+                params.params.pop("fp", None)
+                params.with_a_bogus()
+                params.with_verify_fp(auth)
+                resp = requests.get(
+                    f'{DouyinAPI.douyin_url}{api}', headers=headers.get(),
+                    cookies=auth.cookie, params=params.get(), verify=False,
+                )
+            except Exception:
+                pass
         check_risk_response(resp)
         return resp.json()
 
@@ -498,8 +567,15 @@ class DouyinAPI:
         params.add_param("keyword", query)
         params.add_param("search_source", "tab_search")
         params.add_param("query_correct_type", "1")
-        params.add_param("is_filter_search", '0' if not any(
-            [sort_type != '0', publish_time != '0', filter_duration, search_range, content_type]) else '1')
+        # "0"/空 表示不限；不能用 truthy 判断，否则 web 默认 search_range=0 会误开筛选。
+        has_filter = any([
+            str(sort_type) != "0",
+            str(publish_time) != "0",
+            bool(filter_duration),
+            str(search_range or "0") != "0",
+            str(content_type or "0") != "0",
+        ])
+        params.add_param("is_filter_search", "1" if has_filter else "0")
         # from_group_id / pc_search_top_1_params / search_id 都是**空值字段**，
         # 浏览器确实发。实录顺序：is_filter_search → from_group_id → disable_rs
         params.add_param("from_group_id", "")
@@ -541,15 +617,21 @@ class DouyinAPI:
         :return: 作品列表.
         """
         offset = "0"
+        search_id = kwargs.get("search_id", "")
         work_list = []
         while True:
-            res_json = DouyinAPI.search_general_work(auth, query, sort_type, publish_time, offset,
-                                                     filter_duration, search_range, content_type)
-            works = [w for w in res_json["data"] if w.get("aweme_info")]
+            res_json = DouyinAPI.search_general_work(
+                auth, query, sort_type, publish_time, offset,
+                filter_duration, search_range, content_type, search_id=search_id)
+            rows = _search_list_or_raise(res_json, "data", "搜作品")
+            works = [w for w in rows if isinstance(w, dict) and w.get("aweme_info")]
             work_list.extend(works)
-            if res_json["has_more"] != 1 or len(work_list) >= num:
+            search_id = res_json.get("search_nid") or res_json.get("search_id") or search_id
+            if res_json.get("has_more") != 1 or len(work_list) >= num:
                 break
-            offset = str(int(offset) + len(res_json["data"]))
+            if not rows:
+                break
+            offset = str(int(offset) + len(rows))
         if len(work_list) > num:
             work_list = work_list[:num]
         return work_list
@@ -568,9 +650,9 @@ class DouyinAPI:
         user_list = []
         while True:
             res_json = DouyinAPI.search_user(auth, query, offset, count)
-            users = res_json["user_list"]
+            users = _search_list_or_raise(res_json, "user_list", "搜用户")
             user_list.extend(users)
-            if res_json["has_more"] != 1 or len(user_list) >= num:
+            if res_json.get("has_more") != 1 or len(user_list) >= num:
                 break
             offset = str(int(offset) + int(count))
         if len(user_list) > num:
@@ -715,9 +797,9 @@ class DouyinAPI:
         live_list = []
         while True:
             res_json = DouyinAPI.search_live(auth, query, offset, count)
-            lives = res_json["data"]
+            lives = _search_list_or_raise(res_json, "data", "搜直播")
             live_list.extend(lives)
-            if res_json["has_more"] != 1 or len(live_list) >= num:
+            if res_json.get("has_more") != 1 or len(live_list) >= num:
                 break
             offset = str(int(offset) + int(count))
         if len(live_list) > num:
@@ -1350,19 +1432,16 @@ class DouyinAPI:
         :param count: 数量.
         :return:  JSON.
         """
-        # 实录 curl：max_time 传**当前秒级时间戳**、source_type=1 才返回粉丝；
-        # 传 max_time=0 时服务端走另一条分支，返回 followers=[]（total 也是 0）
-        if not max_time or max_time == '0':
-            max_time = str(int(time.time()))
         # 实录 curl：max_time 传当前秒级时间戳、source_type=1 才返回粉丝；
         # 传 0 服务端走另一分支返回空列表（status_code 仍是 0，别被骗）
         if not max_time or max_time == '0':
             max_time = str(int(time.time()))
         api = "/aweme/v1/web/user/follower/list/"
         headers = HeaderBuilder().build(HeaderType.GET)
-        headers.with_uifid(auth)
         refer = f"https://www.douyin.com/user/{sec_id}"
         headers.set_referer(refer)
+        # 与 following/list 同策略：bd-ticket-guard + webSign，否则常返回 followers=null
+        headers.with_bd_readonly(auth)
         params = Params()
         params.add_param("device_platform", 'webapp')
         params.add_param("aid", '6383')
@@ -1382,7 +1461,8 @@ class DouyinAPI:
         params.with_verify_fp(auth)
         params.add_param("msToken", auth.msToken)
         params.with_a_bogus()
-        res = requests.get(f'{DouyinAPI.douyin_url}{api}', headers=headers.get(), params=params.get(),
+        res = requests.get(params.signed_url(f'{DouyinAPI.douyin_url}{api}', auth),
+                           headers=headers.get(),
                            cookies=auth.cookie, verify=False)
         check_risk_response(res)
         return res.json()
@@ -1402,11 +1482,21 @@ class DouyinAPI:
         follower_list = []
         while True:
             res_json = DouyinAPI.get_user_follower_list(auth, user_id, sec_id, max_time, count)
-            followers = res_json["followers"]
+            followers = res_json.get("followers")
+            if not isinstance(followers, list):
+                status = res_json.get("status_code")
+                msg = res_json.get("status_msg") or res_json.get("message") or ""
+                raise RuntimeError(
+                    f"粉丝列表不可用（status_code={status}"
+                    f"{(' · ' + msg) if msg else ''}）。"
+                    "请确认 Cookie 有效、目标未设隐私，或稍后重试")
             follower_list.extend(followers)
-            if res_json["has_more"] != 1 or len(follower_list) >= num:
+            if res_json.get("has_more") != 1 or len(follower_list) >= num:
                 break
-            max_time = res_json["min_time"]
+            next_time = res_json.get("min_time")
+            if next_time in (None, "", 0, "0"):
+                break
+            max_time = str(next_time)
         if len(follower_list) > num:
             follower_list = follower_list[:num]
         return follower_list
@@ -1495,11 +1585,21 @@ class DouyinAPI:
         following_list = []
         while True:
             res_json = DouyinAPI.get_user_following_list(auth, user_id, sec_id, max_time, count)
-            followings = res_json["followings"]
+            followings = res_json.get("followings")
+            if not isinstance(followings, list):
+                status = res_json.get("status_code")
+                msg = res_json.get("status_msg") or res_json.get("message") or ""
+                raise RuntimeError(
+                    f"关注列表不可用（status_code={status}"
+                    f"{(' · ' + msg) if msg else ''}）。"
+                    "请确认 Cookie 有效、目标未设隐私，或稍后重试")
             following_list.extend(followings)
-            if res_json["has_more"] != 1 or len(following_list) >= num:
+            if res_json.get("has_more") != 1 or len(following_list) >= num:
                 break
-            max_time = res_json["min_time"]
+            next_time = res_json.get("min_time")
+            if next_time in (None, "", 0, "0"):
+                break
+            max_time = str(next_time)
         if len(following_list) > num:
             following_list = following_list[:num]
         return following_list

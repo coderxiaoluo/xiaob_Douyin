@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>抖音采集工作台</title>
+  <link rel="stylesheet" href="/static/app.css?v=ui-polish1" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-name">小波</div>
+        <div class="brand-sub">Workbench</div>
+      </div>
+      <nav id="moduleNav" class="nav" aria-label="功能模块"></nav>
+      <div class="sidebar-mid">
+        <button type="button" class="nav-config" id="archiveNavBtn">
+          <span class="nav-label">本地档案</span>
+          <span class="nav-badge" id="excelCount">0</span>
+        </button>
+      </div>
+      <details class="sidebar-lowfreq" id="sidebarLowfreq">
+        <summary>Agent / 会话</summary>
+        <div class="sidebar-foot">
+          <button type="button" class="nav-config" id="agentNavBtn">
+            <span class="nav-label">Agent 配置</span>
+          </button>
+          <button type="button" class="nav-config" id="configNavBtn">
+            <span class="nav-label">会话配置</span>
+          </button>
+          <div class="session">
+            <span class="dot" id="sessionDot" aria-hidden="true"></span>
+            <span id="sessionText">检测中…</span>
+          </div>
+        </div>
+      </details>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="moduleTitle">搜作品</h1>
+          <p id="moduleDesc">综合搜索视频/图文</p>
+        </div>
+      </header>
+
+      <section class="config-view" id="configView" hidden aria-label="会话配置">
+        <div class="config-grid">
+          <div class="config-main panel">
+            <form id="configForm" class="config-form">
+              <header class="config-block-head">
+                <h2>登录凭证</h2>
+                <p class="config-lead">从 Chrome DevTools → Network 复制已登录请求的 URL + Headers，或只贴 Cookie。</p>
+              </header>
+              <label>
+                <span>抓包原文</span>
+                <textarea id="cfgDump" name="dump" rows="8" placeholder="Request URL&#10;https://www.douyin.com/...&#10;cookie: sessionid=...; ttwid=...&#10;user-agent: Mozilla/5.0 ..."></textarea>
+              </label>
+              <label>
+                <span>或仅 Cookie</span>
+                <textarea id="cfgCookies" name="cookies" rows="3" placeholder="sessionid=...; ttwid=...; UIFID=..."></textarea>
+              </label>
+
+              <header class="config-block-head">
+                <h2>浏览器指纹</h2>
+                <p class="config-lead">与复制 Cookie 的那台浏览器保持一致，降低风控。</p>
+              </header>
+              <div class="config-fp-grid config-fp-grid-browser">
+                <label class="span-2"><span>User-Agent</span><input id="cfgUa" name="ua" type="text" /></label>
+                <label><span>Browser Version</span><input id="cfgBrowserVersion" name="browser_version" type="text" placeholder="156.0.0.0" /></label>
+                <label><span>Engine Version</span><input id="cfgEngineVersion" name="engine_version" type="text" placeholder="156.0.0.0" /></label>
+                <label class="span-2"><span>Accept-Language</span><input id="cfgAcceptLanguage" name="accept_language" type="text" /></label>
+              </div>
+              <div class="config-fp-grid">
+                <label><span>Screen Width</span><input id="cfgScreenWidth" name="screen_width" type="text" /></label>
+                <label><span>Screen Height</span><input id="cfgScreenHeight" name="screen_height" type="text" /></label>
+                <label><span>CPU Cores</span><input id="cfgCpu" name="cpu_core_num" type="text" /></label>
+                <label><span>Device Memory</span><input id="cfgMemory" name="device_memory" type="text" /></label>
+              </div>
+
+              <header class="config-block-head">
+                <h2>网络</h2>
+              </header>
+              <label>
+                <span>代理</span>
+                <input id="cfgProxy" name="proxy" type="text" placeholder="http://127.0.0.1:7890" autocomplete="off" />
+                <small class="field-hint">留空则直连；采集与直播 WebSocket 共用</small>
+              </label>
+
+              <div class="config-actions">
+                <button type="button" class="btn btn-secondary" id="cfgParseBtn">
+                  <span class="btn-label">解析抓包</span><span class="arrow" aria-hidden="true">→</span>
+                </button>
+                <button type="submit" class="btn btn-primary" id="cfgSaveBtn">
+                  <span class="btn-label">保存并重载会话</span><span class="arrow" aria-hidden="true">→</span>
+                </button>
+              </div>
+              <p class="config-msg" id="cfgMsg" hidden></p>
+            </form>
+          </div>
+
+          <aside class="config-side panel">
+            <div class="config-side-sticky">
+              <section class="config-card" aria-label="当前状态">
+                <h2>当前状态</h2>
+                <dl class="config-status" id="cfgStatus">
+                  <div><dt>Cookie</dt><dd id="cfgHasCookies">—</dd></div>
+                  <div><dt>sessionid</dt><dd id="cfgHasSession">—</dd></div>
+                  <div><dt>ttwid</dt><dd id="cfgHasTtwid">—</dd></div>
+                  <div><dt>UIFID</dt><dd id="cfgHasUifid">—</dd></div>
+                  <div><dt>代理</dt><dd id="cfgProxyState">—</dd></div>
+                  <div><dt>路径</dt><dd id="cfgEnvPath" class="path">—</dd></div>
+                </dl>
+              </section>
+
+              <section class="config-card qr-box" aria-label="扫码登录">
+                <div class="qr-head">
+                  <h2>扫码登录</h2>
+                  <button type="button" class="btn btn-secondary" id="qrStartBtn">
+                    <span class="btn-label">生成二维码</span><span class="arrow" aria-hidden="true">→</span>
+                  </button>
+                </div>
+                <p class="config-lead">抖音 App 扫码确认后写入 Cookie，无需再从浏览器复制。</p>
+                <div class="qr-frame" id="qrFrame" hidden>
+                  <img id="qrImg" class="qr-img" alt="登录二维码" />
+                </div>
+                <p class="qr-msg" id="qrMsg">还没有二维码</p>
+              </section>
+
+              <section class="config-card config-guide">
+                <h3>抓包时留这些</h3>
+                <ul>
+                  <li><strong>必留</strong>：cookie 整行</li>
+                  <li><strong>必留</strong>：user-agent</li>
+                  <li><strong>必留</strong>：screen / cpu / memory / browser_version</li>
+                  <li><strong>可丢</strong>：msToken、a_bogus、csrf</li>
+                </ul>
+              </section>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="config-view agent-view" id="agentView" hidden aria-label="Agent 配置">
+        <div class="agent-simple panel">
+          <form id="agentForm" class="config-form">
+            <header class="config-block-head">
+              <h2>今天要做什么</h2>
+              <p class="config-lead">现在只保存策略，不会自动发视频、评论或私信。流程：填目标 → 勾选能力 → 保存。</p>
+            </header>
+
+            <ol class="agent-steps" aria-label="配置流程">
+              <li><strong>1</strong> 写清品类和今日目标</li>
+              <li><strong>2</strong> 打开需要的能力（默认全关）</li>
+              <li><strong>3</strong> 保存；执行计划以后再接</li>
+            </ol>
+
+            <label class="inline-check"><input id="agentEnabled" name="enabled" type="checkbox" /><span>启用这份策略</span></label>
+
+            <div class="config-fp-grid">
+              <label><span>品类</span><input id="agentCategory" name="category" maxlength="64" placeholder="例如：本地生活" /></label>
+              <label><span>日产量</span><input id="agentDailyVideos" name="daily_videos" type="number" min="0" max="20" value="1" required /></label>
+              <label class="span-2"><span>承接方式</span>
+                <select id="agentFunnel" name="funnel">
+                  <option value="comment">评论区互动</option>
+                  <option value="dm">私信承接</option>
+                  <option value="profile">主页引流</option>
+                </select>
+              </label>
+              <label class="span-2"><span>今日目标</span><textarea id="agentBrief" name="brief" rows="2" maxlength="2000" placeholder="一句话说清楚今天要做成什么"></textarea></label>
+            </div>
+
+            <details class="agent-more">
+              <summary>能力开关</summary>
+              <p class="config-lead">开私信时必须同时开「人工确认」。</p>
+              <div class="agent-tools">
+                <label class="inline-check"><input id="tool_gen_video" type="checkbox" /><span>生成视频</span></label>
+                <label class="inline-check"><input id="tool_gen_cover" type="checkbox" /><span>生成封面</span></label>
+                <label class="inline-check"><input id="tool_publish_video" type="checkbox" /><span>发布视频</span></label>
+                <label class="inline-check"><input id="tool_comment" type="checkbox" /><span>评论</span></label>
+                <label class="inline-check"><input id="tool_hot_reply" type="checkbox" /><span>热评回复</span></label>
+                <label class="inline-check"><input id="tool_dm_reply" type="checkbox" /><span>私信承接</span></label>
+              </div>
+            </details>
+
+            <details class="agent-more">
+              <summary>人设 · 配额 · 安全（可选）</summary>
+              <div class="config-fp-grid">
+                <label class="span-2"><span>语气</span><input id="agentTone" name="tone" maxlength="64" placeholder="轻松专业" /></label>
+                <label class="span-2"><span>禁区</span><textarea id="agentForbidden" name="forbidden" rows="2" maxlength="500" placeholder="硬广、保证收益…"></textarea></label>
+                <label><span>日发布上限</span><input id="agentMaxPublish" name="max_publish_per_day" type="number" min="0" max="50" value="3" /></label>
+                <label><span>日评论上限</span><input id="agentMaxComments" name="max_comments_per_day" type="number" min="0" max="500" value="20" /></label>
+                <label><span>日私信上限</span><input id="agentMaxDm" name="max_dm_per_day" type="number" min="0" max="200" value="10" /></label>
+                <label><span>最短间隔（秒）</span><input id="agentMinInterval" name="min_action_interval_sec" type="number" min="30" max="3600" value="180" /></label>
+                <label><span>连续失败冷却</span><input id="agentCoolDown" name="cooldown_after_errors" type="number" min="1" max="20" value="3" /></label>
+                <label><span>作品最低赞</span><input id="agentWorkMinDigg" name="work_min_digg" type="number" min="0" value="0" /></label>
+                <label><span>评论最低赞</span><input id="agentCommentMinDigg" name="comment_min_digg" type="number" min="0" value="0" /></label>
+                <label><span>评论含关键词</span><input id="agentCommentKeyword" name="comment_keyword" maxlength="64" placeholder="可选，如：碎梦" /></label>
+                <label><span>评论排除词</span><input id="agentCommentExclude" name="comment_exclude" maxlength="64" placeholder="可选" /></label>
+                <label><span>每作品评论上限</span><input id="agentMaxCommentsPerWork" name="max_comments_per_work" type="number" min="1" max="30" value="5" /></label>
+                <label class="inline-check span-2"><input id="agentIntentOnly" type="checkbox" /><span>评论仅保留意向</span></label>
+              </div>
+              <div class="agent-tools" style="margin-top:12px">
+                <label class="inline-check"><input id="agentManualConfirm" type="checkbox" /><span>发布前人工确认</span></label>
+                <label class="inline-check"><input id="agentSensitiveCheck" type="checkbox" /><span>敏感词检查</span></label>
+              </div>
+            </details>
+
+            <div class="config-actions">
+              <button type="button" class="btn btn-secondary" id="agentPreviewBtn">
+                <span class="btn-label">预览计划</span><span class="arrow" aria-hidden="true">→</span>
+              </button>
+              <button type="submit" class="btn btn-primary" id="agentSaveBtn">
+                <span class="btn-label">保存策略</span><span class="arrow" aria-hidden="true">→</span>
+              </button>
+              <p class="agent-path-inline path" id="agentPath">—</p>
+            </div>
+            <p class="config-msg" id="agentMsg" hidden></p>
+
+            <section class="agent-plan" id="agentPlanBox" aria-label="今日计划预览">
+              <header class="config-block-head">
+                <h2>今日计划预览</h2>
+                <p class="config-lead" id="agentPlanLead">保存或点「预览计划」后，这里显示只读步骤（不会执行）。</p>
+              </header>
+              <p class="agent-plan-summary" id="agentPlanSummary">—</p>
+              <ul class="agent-plan-warnings" id="agentPlanWarnings" hidden></ul>
+              <ol class="agent-plan-steps" id="agentPlanSteps"></ol>
+              <p class="agent-plan-empty" id="agentPlanEmpty">还没有计划。开启能力并预览后会出现步骤。</p>
+            </section>
+
+            <section class="agent-queue" id="agentQueueBox" aria-label="确认队列">
+              <header class="config-block-head">
+                <h2>确认队列</h2>
+                <p class="config-lead">流程：批准 → 只读准备 → 生成草稿 → 确认后才真实发评论。私信/发布视频仍未接入。</p>
+              </header>
+              <div class="agent-queue-toolbar">
+                <p class="agent-queue-count" id="agentQueueCount">待确认 0</p>
+                <div class="agent-queue-toolbar-actions">
+                  <button type="button" class="btn btn-secondary" id="agentWorkerBtn">
+                    <span class="btn-label">跑只读准备</span><span class="arrow" aria-hidden="true">→</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary" id="agentDraftBtn">
+                    <span class="btn-label">生成草稿</span>
+                  </button>
+                  <button type="button" class="btn btn-primary" id="agentWriteBtn">
+                    <span class="btn-label">执行评论</span><span class="arrow" aria-hidden="true">→</span>
+                  </button>
+                </div>
+              </div>
+              <ul class="agent-queue-list" id="agentQueueList"></ul>
+              <p class="agent-plan-empty" id="agentQueueEmpty">暂无待确认项。预览计划后，需确认的步骤会出现在这里。</p>
+            </section>
+          </form>
+        </div>
+      </section>
+
+      <section class="archive-view" id="archiveView" hidden aria-label="本地档案">
+        <div class="archive-page panel">
+          <header class="archive-page-head">
+            <div>
+              <h2>本地档案</h2>
+              <p class="config-lead">已导出的 Excel / 媒体清单，点击下载。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" id="archiveRefreshBtn">
+              <span class="btn-label">刷新</span>
+              <span class="arrow" aria-hidden="true">→</span>
+            </button>
+          </header>
+          <div class="archive-page-meta">
+            <span class="field-label">目录</span>
+            <p class="path" id="excelDir" title="">—</p>
+            <span class="archive-count-pill">共 <strong id="excelCountLabel">0</strong> 个文件</span>
+          </div>
+          <ul class="archive-file-grid" id="excelList"></ul>
+          <p class="archive-empty" id="archiveEmpty" hidden>暂无导出文件。在工作台保存结果后会出现在这里。</p>
+        </div>
+      </section>
+
+      <div class="workspace" id="workView">
+        <section class="panel control" aria-label="操作区">
+          <form id="taskForm" class="task-form">
+            <div class="query-primary">
+              <div id="fieldsPrimary" class="fields fields-primary"></div>
+              <div class="actions">
+                <button type="submit" class="btn btn-primary btn-accent" id="scanBtn">
+                  <span class="btn-label">扫描 / 拉取</span>
+                  <span class="arrow" aria-hidden="true">→</span>
+                </button>
+              </div>
+            </div>
+            <div class="query-secondary" id="querySecondary" hidden>
+              <div id="fieldsSecondary" class="fields fields-secondary"></div>
+            </div>
+            <div class="job-inline" id="jobInline" hidden>
+              <span class="status-chip" id="jobChip">—</span>
+            </div>
+            <!-- 兼容旧逻辑：隐藏聚合容器 -->
+            <div id="fields" hidden></div>
+          </form>
+
+          <div class="job" id="jobBox" hidden>
+            <div class="job-head">
+              <span id="jobStatus">—</span>
+              <p class="job-msg" id="jobMsg"></p>
+              <span id="jobPct">0%</span>
+            </div>
+            <div class="bar" aria-hidden="true"><i id="jobBar"></i></div>
+            <pre class="log" id="jobLog" hidden></pre>
+          </div>
+        </section>
+
+        <div class="workspace-body">
+          <section class="panel results" aria-label="结果区">
+            <div class="result-head">
+              <h2>扫描预览</h2>
+              <div class="result-actions">
+                <a id="excelLink" class="text-link" hidden href="#">下载文件 →</a>
+                <span id="resultCount">0</span>
+              </div>
+            </div>
+
+            <div class="result-chrome" id="resultChrome" hidden>
+              <div class="result-toolbar" id="saveBar">
+                <div class="toolbar-left">
+                  <label class="check">
+                    <input type="checkbox" id="checkAll" />
+                    <span>全选</span>
+                  </label>
+                  <span id="selectedCount" class="selected-count">已选 0</span>
+                  <label class="toolbar-search">
+                    <span class="visually-hidden">结果内搜索</span>
+                    <input type="search" id="resultSearch" placeholder="结果内搜索标题/作者…" />
+                  </label>
+                </div>
+                <div class="toolbar-right">
+                  <button type="button" class="btn btn-primary btn-accent" id="saveBtn">
+                    <span class="btn-label">保存所选</span>
+                    <span class="arrow" aria-hidden="true">→</span>
+                  </button>
+                </div>
+              </div>
+
+              <details class="result-more" id="exportMore">
+                <summary>导出选项</summary>
+                <div class="result-more-body">
+                  <label class="toolbar-field">
+                    <span>导出</span>
+                    <select id="saveChoiceSelect" aria-label="导出方式">
+                      <option value="all" selected>Excel + 媒体</option>
+                      <option value="excel">仅 Excel / JSON</option>
+                      <option value="media">仅媒体</option>
+                    </select>
+                  </label>
+                  <label class="toolbar-field toolbar-name">
+                    <span>文件名</span>
+                    <input id="saveName" placeholder="导出文件名" aria-label="文件名" />
+                  </label>
+                </div>
+              </details>
+
+              <details class="result-more comment-filters" id="commentFilters" hidden>
+                <summary>结果内筛选 <span class="comment-filter-stats" id="cfStats"></span></summary>
+                <div class="result-more-body comment-filters-body">
+                  <label class="inline-check"><input type="checkbox" id="cfIntentOnly" /><span>仅意向</span></label>
+                  <label class="inline-check"><input type="checkbox" id="cfVerified" /><span>仅认证</span></label>
+                  <label class="filter-field">属地 <input type="text" id="cfIp" maxlength="32" placeholder="如：广东" /></label>
+                  <label class="filter-field">性别
+                    <select id="cfGender">
+                      <option value="">不限</option>
+                      <option value="男">男</option>
+                      <option value="女">女</option>
+                    </select>
+                  </label>
+                  <label class="filter-field filter-grow">关键词 <input type="text" id="cfKeyword" maxlength="64" placeholder="评论内容" /></label>
+                  <button type="button" class="btn btn-secondary" id="cfApplyBtn">应用</button>
+                </div>
+              </details>
+            </div>
+
+            <div class="grid" id="resultGrid"></div>
+            <div class="empty" id="emptyState">
+              <p>还没有结果</p>
+              <p>上方填写条件后扫描，结果会在这里预览并勾选保存。</p>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section class="live-view" id="liveView" hidden aria-label="直播间监听">
+        <section class="panel live-side">
+          <form id="liveForm" class="live-form">
+            <label>
+              <span>直播间</span>
+              <input id="liveInput" name="live" type="text" required placeholder="https://live.douyin.com/123 或房间号" />
+            </label>
+            <div class="live-actions">
+              <button type="submit" class="btn btn-primary" id="liveStartBtn">
+                <span class="btn-label">开始监听</span><span class="arrow" aria-hidden="true">→</span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="liveStopBtn">
+                <span class="btn-label">停止</span>
+              </button>
+            </div>
+          </form>
+          <p class="live-status" id="liveStatus">未连接</p>
+          <dl class="live-stats">
+            <div><dt>在线</dt><dd id="statOnline">—</dd></div>
+            <div><dt>弹幕</dt><dd id="statChat">0</dd></div>
+            <div><dt>礼物</dt><dd id="statGift">0</dd></div>
+            <div><dt>进场</dt><dd id="statEnter">0</dd></div>
+            <div><dt>点赞</dt><dd id="statLike">0</dd></div>
+            <div><dt>关注</dt><dd id="statSocial">0</dd></div>
+          </dl>
+          <button type="button" class="btn btn-secondary btn-block" id="liveExportBtn">
+            <span class="btn-label">导出 Excel</span><span class="arrow" aria-hidden="true">→</span>
+          </button>
+          <a id="liveExportLink" class="text-link" hidden href="#">下载 →</a>
+        </section>
+        <section class="panel live-feed" aria-label="消息">
+          <div class="result-head">
+            <h2>实时消息</h2>
+            <div class="seg live-filter" role="radiogroup" aria-label="消息类型" id="liveFilter">
+              <label class="seg-item"><input type="radio" name="liveFilter" value="all" checked /><span>全部</span></label>
+              <label class="seg-item"><input type="radio" name="liveFilter" value="chat" /><span>弹幕</span></label>
+              <label class="seg-item"><input type="radio" name="liveFilter" value="gift" /><span>礼物</span></label>
+              <label class="seg-item"><input type="radio" name="liveFilter" value="enter" /><span>进场</span></label>
+              <label class="seg-item"><input type="radio" name="liveFilter" value="like" /><span>点赞</span></label>
+              <label class="seg-item"><input type="radio" name="liveFilter" value="social" /><span>关注</span></label>
+              <label class="seg-item"><input type="radio" name="liveFilter" value="pk" /><span>PK</span></label>
+            </div>
+          </div>
+          <ol class="feed" id="liveFeed"></ol>
+          <p class="empty" id="liveEmpty">开始监听后，弹幕和礼物会出现在这里。</p>
+        </section>
+        <aside class="panel live-ranks" aria-label="榜单">
+          <div class="rank-block">
+            <div class="archive-head">
+              <h2>PK 榜</h2>
+              <button type="button" class="text-link" id="pkRefreshBtn">刷新</button>
+            </div>
+            <p class="rank-msg" id="pkMsg">监听开始后可拉取</p>
+            <div id="pkList"></div>
+          </div>
+          <div class="rank-block">
+            <div class="archive-head">
+              <h2>贡献榜</h2>
+              <button type="button" class="text-link" id="contribRefreshBtn">刷新</button>
+            </div>
+            <p class="rank-msg" id="contribMsg">监听开始后可拉取</p>
+            <ol class="rank-list" id="contribList"></ol>
+          </div>
+        </aside>
+      </section>
+    </div>
+  </div>
+  <script src="/static/app.js?v=card-cover2"></script>
+</body>
+</html>

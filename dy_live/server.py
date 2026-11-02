@@ -273,7 +273,7 @@ class DouyinLive:
                 if method not in self.muted_messages:
                     logger.error(traceback.format_exc())
 
-    def start_ws(self, room_info=None):
+    def start_ws(self, room_info=None, reconnect=1):
         """
         连接直播间消息接口，并处理接收到的消息
         :param room_info: `DouyinAPI.get_live_info` 的返回结果
@@ -349,7 +349,13 @@ class DouyinLive:
         #         else:
         #             raise
         try:
-            self.ws.run_forever(origin=f'https://{LIVE_HOST}', reconnect=1)
+            from utils.proxy import websocket_proxy_kwargs
+            run_kwargs = {
+                "origin": f"https://{LIVE_HOST}",
+                "reconnect": reconnect,
+            }
+            run_kwargs.update(websocket_proxy_kwargs(getattr(self.auth, "_proxies", None)))
+            self.ws.run_forever(**run_kwargs)
         except Exception as e:
             logger.error(traceback.format_exc())
             self.ws.close()

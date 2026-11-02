@@ -28,3 +28,9 @@ blackboxprotobuf
 backports.zstd ; python_version<'3.14'
 rocksdict==0.3.29
 jsbeautifier==2.0.3
+
+# Web 控制台（python -m webapp.server）
+fastapi
+uvicorn
+jinja2
+python-multipart

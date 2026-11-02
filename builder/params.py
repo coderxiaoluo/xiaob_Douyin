@@ -4,8 +4,10 @@ from utils.dy_util import generate_webid, generate_msToken, splice_url, generate
 
 
 class Params:
-    def __init__(self, params: dict[str, str] = {}):
-        self.params = params
+    def __init__(self, params: dict[str, str] | None = None):
+        # 不能用可变默认值。add_param 会直接写入这份字典，下一次
+        # Params() 会把上一笔请求的字段带进新请求。
+        self.params = {} if params is None else params
 
     def with_platform(self, round_trip_time='0', auth=None, url="",
                       uifid=True, verify_fp=True,

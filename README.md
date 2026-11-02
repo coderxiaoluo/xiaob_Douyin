@@ -14,9 +14,9 @@
           <img src="https://img.shields.io/badge/nodejs-18%2B%20(optional)-lightgrey" alt="NodeJS 18+ (optional)">
       </a>
   </div>
-  
+
   # 🎶DouYin_Spider
-  
+
 </div>
 
 
@@ -193,7 +193,7 @@ python quick_publish.py
 
 
 ## 🍥日志
-   
+
 | 日期       | 说明                                   |
 | -------- | ------------------------------------ |
 | 23/10/05 | - 项目完成。 |
@@ -236,15 +236,17 @@ python quick_publish.py
 </div>
 
 
-## 📈 Star 趋势
+| 优先级 | 字段                             | 说明                                                         |
+| :----- | :------------------------------- | :----------------------------------------------------------- |
+| 必留   | `cookie:` 整行                   | 尤其 `sessionid`、`ttwid`、`UIFID`、`sid_guard`、`bd_ticket_guard_*` |
+| 必留   | `user-agent`                     | 与浏览器一致                                                 |
+| 必留   | URL 查询参数                     | `screen_width/height`、`cpu_core_num`、`device_memory`、`browser_version` |
+| 建议   | `verifyFp` / `fp`                | 没有 `s_v_web_id` 时会自动补上                               |
+| 可丢   | `msToken`、`a_bogus`             | 每次请求现算，粘了也没用                                     |
+| 可丢   | `x-secsdk-csrf-token: DOWNGRADE` | 不是配置项                                                   |
+| 可丢   | 接口路径本身                     | 任意已登录请求都行                                           |
 
-<a href="https://cvcat.site/star-history/svg?repos=cv-cat/DouYin_Spider&type=Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://cvcat.site/star-history/svg?repos=cv-cat/DouYin_Spider&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://cvcat.site/star-history/svg?repos=cv-cat/DouYin_Spider&type=Date" />
-    <img alt="Star History Chart" src="https://cvcat.site/star-history/svg?repos=cv-cat/DouYin_Spider&type=Date" />
-  </picture>
-</a>
+### 配置页
 
 
 

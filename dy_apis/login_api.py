@@ -2803,14 +2803,24 @@ class DYLoginApi:
         return urllib.parse.quote(json.dumps(f"{stage}/{date_text}/0"), safe="")
 
     def qrcode_login(self, timeout=300, show_qr=True, poll_interval=None,
-                     on_qrcode=None, proxies=None):
+                     on_qrcode=None, proxies=None, on_status=None):
         """完整扫码登录，返回登录后的 auth。
 
         二维码实测只有约 60 秒有效期，所以过期后自动换一张继续等，
         直到整体 `timeout` 用完。
 
         :param on_qrcode: 可选回调，每换一张码调用一次，入参是 qrcode_index_url。
+        :param on_status: 可选回调，状态变化时调用，入参为
+            ``{"status": "waiting|scanned|expired|confirmed|throttled", ...}``。
         """
+        def emit(status, **extra):
+            if on_status is None:
+                return
+            try:
+                on_status({"status": status, **extra})
+            except Exception:
+                logger.debug("on_status callback failed", exc_info=True)
+
         poll_interval = self.POLL_INTERVAL if poll_interval is None else poll_interval
         page_started_at = time.time()
         # Keep the no-proxy call signature compatible with lightweight test
@@ -2887,11 +2897,14 @@ class DYLoginApi:
                 # （和限频那次是同一类错误，只是窗口小得多）。
                 last = (self.check_qrcode(auth, token).get("data") or {})
                 if last.get("status") == "confirmed":
+                    emit("confirmed")
                     self._follow_login_redirect(auth, last.get("redirect_url"))
                     auth._ms_pinned = False
                     logger.info("扫码登录成功")
                     return auth
                 if last.get("status") == "scanned":
+                    if not scanned:
+                        emit("scanned")
                     scanned = True
                     logger.info("换码前发现已扫码，这张保留，请在手机上确认")
                     # ⚠️ 这里必须把结果带下去。以前是查完就丢，下面 888 行紧接着
@@ -2917,6 +2930,7 @@ class DYLoginApi:
                     self.print_qrcode(qr_url)
                 if on_qrcode:
                     on_qrcode(qr_url)
+                emit("waiting", qr_url=qr_url)
 
             if pending is not None:
                 info = pending
@@ -2933,6 +2947,7 @@ class DYLoginApi:
                         "继续轮询只会把限频拖得更久。请等几分钟再重试，"
                         "并避免短时间内反复重启登录。")
                 wait = min(wait * 2, 60)
+                emit("throttled", message=f"访问频繁，{round(wait, 1)} 秒后重试")
                 logger.info(f"处于限频状态，将在 {round(wait,1)} 秒之后重新检查二维码结果")
                 time.sleep(wait)
                 continue
@@ -2944,17 +2959,21 @@ class DYLoginApi:
             if fresh_read and first_status_at is None:
                 first_status_at = time.time()
             if status == "confirmed":
+                emit("confirmed")
                 self._follow_login_redirect(auth, info.get("redirect_url"))
                 auth._ms_pinned = False
                 logger.info("扫码登录成功")
                 return auth
             if status == "expired":
+                emit("expired")
                 logger.info("二维码已过期，换一张继续等")
                 token, scanned, fresh_read = None, False, False
                 if not bootstrap_common_done:
                     first_status_at = None
                 continue
             if status == "scanned":
+                if not scanned:
+                    emit("scanned")
                 scanned = True
                 logger.info("已扫码，请在手机上确认（该码不再轮换，安心确认）")
             time.sleep(wait)
