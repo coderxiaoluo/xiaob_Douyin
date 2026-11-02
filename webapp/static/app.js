@@ -810,7 +810,14 @@
           <div class="card-actions">
             <button type="button" class="chip-action${diggOn ? " is-on" : ""}" data-act="digg" data-aweme="${id}" data-on="${diggOn ? "1" : "0"}" aria-pressed="${diggOn}">${diggOn ? "已赞" : "点赞"}</button>
             <button type="button" class="chip-action${collectOn ? " is-on" : ""}" data-act="collect" data-aweme="${id}" data-on="${collectOn ? "1" : "0"}" aria-pressed="${collectOn}">${collectOn ? "已藏" : "收藏"}</button>
+            <button type="button" class="chip-action" data-act="comment" data-aweme="${id}">评论</button>
           </div>
+          <form class="reply-composer work-composer" hidden>
+            <input type="text" class="reply-input" maxlength="200" placeholder="对这条作品发表评论…" aria-label="评论内容" />
+            <button type="submit" class="btn btn-primary btn-sm">
+              <span class="btn-label">发送</span>
+            </button>
+          </form>
           ${time ? `<time class="card-time" datetime="${escapeHtml(String(item.create_time))}">${escapeHtml(time)}</time>` : ""}
         </div>
       </article>`;
@@ -1458,7 +1465,7 @@
     if (!btn) return;
     const act = btn.dataset.act;
 
-    if (act === "reply") {
+    if (act === "reply" || act === "comment") {
       const box = btn.closest(".card")?.querySelector(".reply-composer");
       if (!box) return;
       box.hidden = !box.hidden;
@@ -1496,15 +1503,17 @@
     const input = form.querySelector(".reply-input");
     const content = String(input?.value || "").trim();
     if (!content) return;
-    const trigger = form.closest(".card")?.querySelector('[data-act="reply"]');
+    const card = form.closest(".card");
+    const trigger = card?.querySelector('[data-act="reply"]');
+    const workTrigger = card?.querySelector('[data-act="comment"]');
     const btn = form.querySelector("button");
     btn.disabled = true;
     try {
-      const data = await postJson("/api/action/comment", {
-        work_url: lastWorkUrl,
-        content,
-        reply_id: trigger?.dataset.cid || "",
-      });
+      // 作品卡片直接带 aweme_id；评论区回复仍沿用当前作品链接 + cid
+      const payload = workTrigger
+        ? { aweme_id: workTrigger.dataset.aweme || "", content }
+        : { work_url: lastWorkUrl, content, reply_id: trigger?.dataset.cid || "" };
+      const data = await postJson("/api/action/comment", payload);
       if (!data.ok) throw new Error(data.message || "发布失败");
       input.value = "";
       form.hidden = true;
