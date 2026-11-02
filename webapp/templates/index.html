@@ -80,6 +80,9 @@
                 <button type="submit" class="btn btn-primary" id="cfgSaveBtn">
                   <span class="btn-label">保存并重载会话</span><span class="arrow" aria-hidden="true">→</span>
                 </button>
+                <button type="button" class="btn btn-secondary" id="cfgClearBtn">
+                  <span class="btn-label">清空会话</span><span class="arrow" aria-hidden="true">→</span>
+                </button>
               </div>
               <p class="config-msg" id="cfgMsg" hidden></p>
             </form>
@@ -106,7 +109,7 @@
                     <span class="btn-label">生成二维码</span><span class="arrow" aria-hidden="true">→</span>
                   </button>
                 </div>
-                <p class="config-lead">抖音 App 扫码确认后写入 Cookie，无需再从浏览器复制。</p>
+                <p class="config-lead">先保存当前浏览器指纹，再清空旧登录，然后重新扫码。只保存不会改掉 Cookie 里已经写死的屏幕和 CPU。</p>
                 <div class="qr-frame" id="qrFrame" hidden>
                   <img id="qrImg" class="qr-img" alt="登录二维码" />
                 </div>

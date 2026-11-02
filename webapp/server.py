@@ -65,7 +65,19 @@ _spider = Data_Spider()
 _live = LiveSession()
 _qr_lock = threading.Lock()
 _qr_thread: threading.Thread | None = None
+_qr_generation = 0
 _qr = {"status": "idle", "qr_url": "", "message": ""}
+# 清空只去掉登录材料。浏览器指纹和代理留着，下一次扫码按当前指纹重写 Cookie。
+_SESSION_KEYS = (
+    "DY_COOKIES",
+    "DY_LIVE_COOKIES",
+    "DY_TICKET",
+    "DY_TS_SIGN",
+    "DY_CLIENT_CERT",
+    "DY_PRIVATE_KEY",
+    "DY_DTRAIT_BLOB",
+    "DY_SESSION_DTRAIT",
+)
 
 MODULES = [
     {"id": "search_work", "group": "搜索", "label": "搜作品", "desc": "综合搜索视频/图文"},
@@ -884,18 +896,48 @@ def _write_env_values(updates: dict[str, str]):
     load_dotenv(dotenv_path=str(ENV_PATH), override=True)
 
 
+def _refresh_fingerprint_bindings():
+    """让请求头和签名跟当前 DY_FP_* 走。这两处在进程启动时缓存，只改配置不会更新。"""
+    import utils.dy_util as dy_util
+    import utils.fingerprint as fingerprint
+    from builder.header import HeaderBuilder
+
+    fingerprint._profile = None  # noqa: SLF001
+    profile = fingerprint.get_profile()
+    HeaderBuilder.ua = profile["ua"]
+    HeaderBuilder.sec_ch_ua = profile["sec_ch_ua"]
+    HeaderBuilder.sec_ch_ua_platform = profile["sec_ch_ua_platform"]
+    HeaderBuilder.accept_language = profile["accept_language"]
+    dy_util._pure_signer = None  # noqa: SLF001 — 签名器里的 UA / 屏幕也是启动时冻住的
+
+
 def _reload_runtime_auth():
     global _auth, _base_path
     import utils.common_util as common_util
-    import utils.fingerprint as fingerprint
 
-    fingerprint._profile = None  # noqa: SLF001 — 强制按新 DY_FP_* 重建
+    _refresh_fingerprint_bindings()
     common_util.dy_auth = None
     common_util.dy_live_auth = None
     with _lock:
         _auth = None
         _base_path = {}
     return _ensure_runtime()
+
+
+def _stamp_device_cookies(auth):
+    """扫码落盘前，用当前指纹重写设备 Cookie。setdefault 不会覆盖旧屏幕。"""
+    from dy_apis.login_api import DYLoginApi
+
+    cookie = getattr(auth, "cookie", None)
+    if not isinstance(cookie, dict):
+        return
+    for name in (
+        "dy_swidth", "dy_sheight", "device_web_cpu_core", "device_web_memory_size",
+        "stream_recommend_feed_params", "fpk2",
+    ):
+        cookie.pop(name, None)
+    DYLoginApi._add_page_cookies(auth)
+    auth.cookie_str = "; ".join(f"{k}={v}" for k, v in auth.cookie.items())
 
 
 def _config_snapshot() -> dict:
@@ -1779,6 +1821,13 @@ def _set_qr(**fields):
         _qr.update(fields)
 
 
+def _set_qr_for(generation: int, **fields):
+    with _qr_lock:
+        if generation != _qr_generation:
+            return
+        _qr.update(fields)
+
+
 def _persist_login(auth):
     updates = {"DY_COOKIES": auth.cookie_str}
     for key, value in (
@@ -1792,13 +1841,14 @@ def _persist_login(auth):
     _write_env_values(updates)
 
 
-def _qr_worker():
+def _qr_worker(generation: int):
     try:
         from dy_apis.login_api import DYLoginApi
+        _refresh_fingerprint_bindings()
         proxies = proxies_from_url(os.getenv("DY_PROXY"))
 
         def on_qrcode(url):
-            _set_qr(status="waiting", qr_url=url or "", message="请用抖音 App 扫码")
+            _set_qr_for(generation, status="waiting", qr_url=url or "", message="请用抖音 App 扫码")
 
         def on_status(info):
             status = info.get("status") or "waiting"
@@ -1812,7 +1862,7 @@ def _qr_worker():
             fields = {"status": status, "message": message}
             if info.get("qr_url"):
                 fields["qr_url"] = info["qr_url"]
-            _set_qr(**fields)
+            _set_qr_for(generation, **fields)
 
         auth = DYLoginApi().qrcode_login(
             timeout=180,
@@ -1821,7 +1871,11 @@ def _qr_worker():
             on_status=on_status,
             proxies=proxies,
         )
-        _persist_login(auth)
+        with _qr_lock:
+            if generation != _qr_generation:
+                return
+            _stamp_device_cookies(auth)
+            _persist_login(auth)
         auth, _ = _reload_runtime_auth()
         uid = None
         try:
@@ -1831,11 +1885,11 @@ def _qr_worker():
         message = "登录成功"
         if uid:
             message += f" · uid {uid}"
-        _set_qr(status="confirmed", message=message, qr_url="")
+        _set_qr_for(generation, status="confirmed", message=message, qr_url="")
     except TimeoutError:
-        _set_qr(status="timeout", message="扫码超时，请重新生成", qr_url="")
+        _set_qr_for(generation, status="timeout", message="扫码超时，请重新生成", qr_url="")
     except Exception as exc:
-        _set_qr(status="error", message=str(exc))
+        _set_qr_for(generation, status="error", message=str(exc))
 
 
 class LiveStartBody(BaseModel):
@@ -1845,6 +1899,66 @@ class LiveStartBody(BaseModel):
 @app.get("/api/login/qr")
 def api_login_qr_status():
     return {"ok": True, **_qr_public()}
+
+
+@app.post("/api/session/clear")
+def api_session_clear(body: ConfigBody):
+    """清掉登录 Cookie 和票据，保留当前表单里的指纹与代理。"""
+    global _qr_generation
+    updates = {key: "" for key in _SESSION_KEYS}
+    ua = (body.ua or "").strip()
+    browser_version = (body.browser_version or "").strip()
+    engine_version = (body.engine_version or browser_version).strip()
+    screen_width = (body.screen_width or "").strip()
+    screen_height = (body.screen_height or "").strip()
+    cpu_core_num = (body.cpu_core_num or "").strip()
+    device_memory = (body.device_memory or "").strip()
+    accept_language = (body.accept_language or "").strip()
+    if ua:
+        updates["DY_FP_UA"] = ua
+    if browser_version:
+        updates["DY_FP_BROWSER_VERSION"] = browser_version
+    if engine_version:
+        updates["DY_FP_ENGINE_VERSION"] = engine_version
+    if screen_width:
+        updates["DY_FP_SCREEN_WIDTH"] = screen_width
+    if screen_height:
+        updates["DY_FP_SCREEN_HEIGHT"] = screen_height
+    if cpu_core_num:
+        updates["DY_FP_CPU_CORE_NUM"] = cpu_core_num
+    if device_memory:
+        updates["DY_FP_DEVICE_MEMORY"] = device_memory
+    if accept_language:
+        updates["DY_FP_ACCEPT_LANGUAGE"] = accept_language
+    updates["DY_PROXY"] = (body.proxy or "").strip()
+    with _qr_lock:
+        _qr_generation += 1
+        _qr.update(
+            status="idle",
+            qr_url="",
+            message="会话已清空，请重新生成二维码",
+            _images={},
+        )
+        # 进行中的扫码若刚好写回 Cookie，也要在同一把锁里再清掉。
+        _write_env_values(updates)
+    try:
+        _reload_runtime_auth()
+        reloaded = True
+        reload_error = ""
+    except Exception as exc:
+        reloaded = False
+        reload_error = str(exc)
+    return {
+        "ok": True,
+        "cleared": True,
+        "reloaded": reloaded,
+        "reload_error": reload_error,
+        "logged_in": False,
+        "uid": None,
+        **_config_snapshot(),
+        **_qr_public(),
+        "message": "已清空登录。指纹和代理还在，请重新扫码。",
+    }
 
 
 @app.post("/api/login/qr")
@@ -1861,7 +1975,9 @@ def api_login_qr_start():
         else:
             current = None
             _qr.update(status="starting", qr_url="", message="正在获取二维码…")
-            _qr_thread = threading.Thread(target=_qr_worker, daemon=True, name="qr-login")
+            _qr_thread = threading.Thread(
+                target=_qr_worker, args=(_qr_generation,), daemon=True, name="qr-login",
+            )
             _qr_thread.start()
     if current is not None:
         current["image"] = _qr_png(current.get("qr_url") or "")

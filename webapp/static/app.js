@@ -1401,6 +1401,51 @@
     }
   });
 
+  function readConfigForm() {
+    return {
+      dump: $("#cfgDump").value,
+      cookies: $("#cfgCookies").value,
+      ua: $("#cfgUa").value,
+      browser_version: $("#cfgBrowserVersion").value,
+      engine_version: $("#cfgEngineVersion").value,
+      accept_language: $("#cfgAcceptLanguage").value,
+      screen_width: $("#cfgScreenWidth").value,
+      screen_height: $("#cfgScreenHeight").value,
+      cpu_core_num: $("#cfgCpu").value,
+      device_memory: $("#cfgMemory").value,
+      proxy: $("#cfgProxy").value.trim(),
+    };
+  }
+
+  $("#cfgClearBtn").addEventListener("click", async () => {
+    const ok = window.confirm("清空当前登录 Cookie 和票据。浏览器指纹、代理会按页面上的值留下。清空后需要重新扫码。");
+    if (!ok) return;
+    showCfgMsg("正在清空…", true);
+    $("#cfgClearBtn").disabled = true;
+    try {
+      const res = await fetch("/api/session/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...readConfigForm(), cookies: "", dump: "", reload_auth: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "清空失败");
+      $("#cfgCookies").value = "";
+      $("#cfgDump").value = "";
+      renderConfigStatus(data);
+      applyQr(data);
+      clearInterval(qrTimer);
+      qrTimer = null;
+      $("#qrStartBtn").disabled = false;
+      showCfgMsg(data.message || "已清空登录，请重新扫码", true);
+      await refreshStatus();
+    } catch (err) {
+      showCfgMsg(err.message || String(err), false);
+    } finally {
+      $("#cfgClearBtn").disabled = false;
+    }
+  });
+
   $("#cfgParseBtn").addEventListener("click", async () => {
     showCfgMsg("解析中…", true);
     try {
@@ -1430,20 +1475,7 @@
       const res = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dump: $("#cfgDump").value,
-          cookies: $("#cfgCookies").value,
-          ua: $("#cfgUa").value,
-          browser_version: $("#cfgBrowserVersion").value,
-          engine_version: $("#cfgEngineVersion").value,
-          accept_language: $("#cfgAcceptLanguage").value,
-          screen_width: $("#cfgScreenWidth").value,
-          screen_height: $("#cfgScreenHeight").value,
-          cpu_core_num: $("#cfgCpu").value,
-          device_memory: $("#cfgMemory").value,
-          proxy: $("#cfgProxy").value.trim(),
-          reload_auth: true,
-        }),
+        body: JSON.stringify({ ...readConfigForm(), reload_auth: true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "保存失败");
