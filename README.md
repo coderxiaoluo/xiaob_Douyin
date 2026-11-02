@@ -1,276 +1,193 @@
-<div align="center">
-  <p align="center">
-    <a href="https://github.com/cv-cat/Douyin_Spider" target="_blank" align="center" alt="Go to Douyin_Spider Website">
-      <picture>
-        <img width="220" src="./author/logo.jpg" alt="Douyin_Spider logo">
-      </picture>
-    </a>
-  </p>
-  <div align="center">
-      <a href="https://www.python.org/">
-          <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python 3.9+">
-      </a>
-      <a href="https://nodejs.org/zh-cn/">
-          <img src="https://img.shields.io/badge/nodejs-18%2B%20(optional)-lightgrey" alt="NodeJS 18+ (optional)">
-      </a>
-  </div>
+# 小波 · 抖音采集工作台
 
-  # 🎶DouYin_Spider
+本地运行的抖音数据采集工具，带一套完整的 Web 界面。抓取、预览、勾选、导出全在浏览器里完成，不用记命令行参数。
 
-</div>
+- 搜索：按关键词抓作品 / 用户 / 直播间
+- 用户：主页作品、资料、粉丝、关注
+- 作品：详情、评论区（含多级回复）、多链接批量
+- 直播：只读监听弹幕、礼物、进场、点赞，查看 PK 榜与贡献榜
+- 导出：Excel + 封面图 / 视频 / 图片，落盘到 `datas/`
 
-
-## ❤️Sponsor
-
-<div align="center">
-
-<a href="https://api.openai-next.com">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./author/sponsors/vectrust-dark.png">
-    <img src="./author/sponsors/vectrust.png" alt="Vectrust" height="72">
-  </picture>
-</a>
-
-**Sponsored by [Vectrust](https://api.openai-next.com) @ OpenDev Org & NextRouter Alliance**
-
-<sub>[想出现在这里？](mailto:992822653@qq.com)</sub>
-
-</div>
+> 所有写操作（发评论、私信、发布）默认不执行，只生成计划与草稿，需人工确认。
 
 ---
 
-<div align="center">
+## 环境要求
 
-[![FastAIToken](https://raw.githubusercontent.com/TheSmallHanCat/flow2api/main/static/sponsors/fastaitoken-banner.png)](https://www.fastaitoken.com/register?aff=48J4VXUABAAV)
+| 项 | 要求 |
+| --- | --- |
+| Python | 3.10 及以上（3.14 也支持） |
+| 系统 | Windows / macOS / Linux |
+| 网络 | 需要能访问 `douyin.com`，必要时配代理 |
+| 浏览器 | 新版 Chrome / Edge |
 
-</div>
+## 快速开始
 
-**FastAIToken** 是面向开发者的 AI API 聚合平台，支持 OpenAI、Claude、Gemini 等主流大模型，兼容 OpenAI API 协议，可无缝接入 **Claude Code、Codex、Gemini CLI、Cherry Studio、Cline、Continue** 等各类 AI 开发工具。平台采用 **充值 1:1（1 元 = 1 美元 API 额度）**，帮助开发者以更低成本、更高效率地使用全球领先的大模型服务。
+### 方式一：Windows 一键启动（推荐）
 
-平台提供多个可选分组与公开状态页，开发者可根据成本、响应速度和稳定性自由选择不同渠道，并享受 **7×24 小时真人技术支持**（非机器人）。
+双击 `start_web.bat`。脚本会自动：
 
-**主要做 AI 开发接入？可以试试 [FastAIToken](https://www.fastaitoken.com/register?aff=48J4VXUABAAV)，兼容 Codex / Claude Code / Gemini CLI 等主流工具。**
+1. 检查 Python 是否可用
+2. `.env` 不存在时从 `.env.example` 复制一份
+3. 释放被占用的端口
+4. 打开浏览器并启动服务
 
----
+PowerShell 用户可用 `start_web.ps1`，逻辑相同。
 
-**✨ 专业的抖音数据采集与交互解决方案，支持数据爬取、直播间监听、私信收发、创作者发布等功能**
+### 方式二：手动启动
 
-大模型时代，自动化是每个开发者都绕不开的课题。
-当你想让 AI Agent 真正落地到抖音——自动处理私信、感知直播间动态、驱动内容互动——第一道墙往往不是模型能力，而是**平台通信能力的缺失**。
-
-本项目做的事很简单：把这道墙拆掉。
-
-**⚠️ 严禁用于发布不良信息、违法内容！本项目仅供学习与技术研究使用，如有侵权请联系作者删除，后果自负。**
-
-## 🌟 功能特性
-
-- ✅ **多维度数据采集**
-  - 用户主页信息 / 作品详情
-  - 评论区数据（含多级回复）
-  - 智能搜索（视频 / 用户 / 直播）
-  - 关注 / 粉丝列表
-  - 消息通知 / 收藏列表 / 推荐流
-- 🎙️ **直播间实时监听**
-  - 弹幕消息 / 礼物（含送礼对象）/ 进场 / 关注 / 点赞 / 房间热度
-  - PK 实时事件 / PK 排行榜 / 直播间贡献榜
-  - 直播间发送弹幕消息
-  - 直播间点赞
-- 💬 **抖音私信收发**
-  - WebSocket 实时接收私信（文本 / 表情包 / 语音 / 图片 / 分享视频）
-  - 主动发送私信
-  - 创建 / 查询会话列表
-- 🤝 **互动操作**
-  - 点赞视频
-  - 发布评论 / 回复评论
-  - 收藏 / 移动 / 取消收藏作品
-- 📤 **创作者中心**
-  - 发布图集 / 视频（支持可见范围、是否允许下载等设置）
-- 🔑 **多种登录方式**
-  - Cookie / 扫码登录 / 手机号验证码登录
-- 🚀 **高性能架构**
-  - 自动重试机制 / 断线重连
-- 🔒 **安全稳定**
-  - 抖音最新 API 适配
-  - 异常处理机制
-  - proxy 代理
-- 🎨 **便捷管理**
-  - 结构化目录存储
-  - 格式化输出（JSON / EXCEL / MEDIA）
-
-## 🎨效果图
-### 处理后的所有用户
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/3f3ff858-c443-4a68-bae6-1d16ef43011d)
-### 某个用户所有的视频\图集
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/fa6f5e65-7e3c-4abf-b140-cd20c33d3b43)
-### 某个视频\图集具体的内容
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/16cfc027-6186-4914-bca4-901f886a9b82)
-### 某个直播时的具体弹幕发言和礼物数据
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/e2cde1f1-6309-44fe-8aa3-bca2821bf30d)
-### 保存的excel
-![image](https://github.com/user-attachments/assets/5dfd8fb4-7597-4f54-af6a-9ab8ba766b7c)
-
-
-
-## 🛠️ 快速开始
-### ⛳运行环境
-- Python 3.9+
-- Node.js 18+（可选，仅部分直播 / 验证码场景会调用，主流程签名已全部纯 Python 实现）
-
-### 🎯安装依赖
-```
+```bash
+# 1. 安装依赖
 pip install -r requirements.txt
+
+# 2. 准备配置
+copy .env.example .env        # macOS / Linux 用 cp
+
+# 3. 启动
+python -m webapp.server
 ```
 
-### 🎨配置文件
+浏览器打开 <http://127.0.0.1:19527/>
 
-现在推荐只配置 `DY_COOKIES`：主站 `Auth` 会被作品接口、直播 REST/WebSocket 和创作者中心共同复用。
-`DY_LIVE_COOKIES` 仍可作为旧版独立直播浏览器的显式覆盖，但不再是必填项。
+改端口：设置环境变量 `DY_WEB_PORT`，例如
 
-配置文件在项目根目录.env文件中，将下图自己的登录cookie放入其中，cookie获取➡️在浏览器f12打开控制台，点击网络，点击fetch，找一个接口点开
-![image](https://github.com/user-attachments/assets/6a7e4ecb-0432-4581-890a-577e0eae463d)
-
-复制cookie到.env文件中（注意！登录抖音后的cookie才是有效的，不登陆没有用）
-![image](https://github.com/user-attachments/assets/60291f3f-9b69-423f-8b11-167278d44639)
-
-> ⚠️ 请在 `www.douyin.com` 登录后，从任意 `/aweme/v1/web/` 接口请求中复制**完整** cookie，确认其中包含 `UIFID` 字段。缺少 `UIFID` 时作品详情、搜索等接口会被风控拦截（`Uifid Not Found`）。
-
-> `UIFID` 是推荐流接口响应下发的设备标识，复制完整 Cookie 后会自动带上，用户不需要手工生成或填写。
-
-### 写接口的 dtrait 配置
-
-发布、评论、点赞、收藏等写接口会发送按请求路径重算的 `x-tt-session-dtrait`。项目默认加载随包的 [utils/dtrait_profile.json](utils/dtrait_profile.json)，通常不需要额外配置；显式设置 `DY_DTRAIT_BLOB` 时会优先使用它。
-
-`utils/dtrait_features.py` 是 dtrait 内层 VM 的纯 Python 实现，负责 Murmur3、特征标签、布尔位图和 base64 打包；档案里的渲染哈希是设备一次采样后复用的常量，外层 RSA/AES 则每次按请求路径和时间重新计算。
-
-换设备时可以在 `.env` 中设置 `DY_DTRAIT_PROFILE` 指向自己的设备档案 JSON。抓取时在已登录的 `www.douyin.com` 打开开发者工具，在 Console 先执行下面的 hook，再回到页面触发一次点赞、收藏或评论请求：
-
-```js
-(() => {
-  const aes = window.DTraitUcAesEncrypt;
-  if (!aes?.encryptData) throw new Error('dtrait SDK 尚未初始化，请先刷新并等待页面加载完成');
-  const original = aes.encryptData;
-  aes.encryptData = function (...args) {
-    for (const value of args) {
-      const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
-      try {
-        const payload = JSON.parse(text);
-        if (payload?.dtrait) console.log('DY_DTRAIT_BLOB=', payload.dtrait);
-      } catch (_) {}
-    }
-    return original.apply(this, args);
-  };
-  console.log('dtrait hook installed; now trigger one write request');
-})();
+```powershell
+$env:DY_WEB_PORT = "8080"; python -m webapp.server
 ```
 
-把 Console 打印的 `DY_DTRAIT_BLOB` 值复制到 `.env`。不要复制完整 Cookie 或 `x-tt-session-dtrait` 外层密文；外层头会由项目按当前路径和时间重新生成。
+> 依赖安装注意：`blackboxprotobuf` 声明依赖 `protobuf==3.10`，会把 protobuf 降级，导致 `import runtime_version` 报错。`requirements.txt` 里已固定 `protobuf>=5.27`，装完确认一下版本没被降下去即可。
 
+---
 
+## 配置登录凭证
 
-### 🚀运行项目
+没有 Cookie 只能看到公开的少量数据，且大概率被风控。两种配置方式任选：
+
+### A. 扫码登录（最省事）
+
+进入「会话配置」页 → 点「生成二维码」→ 用抖音 App 扫码确认。成功后 Cookie 自动写入 `.env`，状态卡片的 `Cookie / sessionid / ttwid` 会变为已就绪。
+
+### B. 从浏览器复制
+
+1. Chrome 打开 `douyin.com` 并登录
+2. `F12` → Network → 随便点一个接口 → 复制 Request URL 和 Request Headers
+3. 粘贴到「会话配置」的「抓包原文」框 → 点「解析抓包」→「保存并重载会话」
+
+只贴 Cookie 也可以，但要记得补齐浏览器指纹（UA、screen、cpu、memory 等），与复制 Cookie 的那台浏览器保持一致，能明显降低风控概率。
+
+### .env 字段
+
+| 变量 | 说明 |
+| --- | --- |
+| `DY_COOKIES` | 主接口 Cookie |
+| `DY_LIVE_COOKIES` | 直播弹幕 Cookie |
+| `DY_PROXY` | 代理，如 `http://127.0.0.1:7890`，留空直连 |
+| `DY_TICKET` / `DY_TS_SIGN` / `DY_CLIENT_CERT` / `DY_PRIVATE_KEY` | 扫码后自动写入，私信签名用 |
+| `DY_DTRAIT_BLOB` / `DY_DTRAIT_PROFILE` | 写接口设备特征，留空用包内默认档案 |
+
+> `.env` 已在 `.gitignore` 中，**不要提交到仓库**。
+
+---
+
+## 界面怎么用
+
+左侧栏按分组排列：搜索 / 直播 / 用户 / 作品 / 我的，另有「本地档案」和折叠的「Agent / 会话」。
+
+### 采集流程
+
+1. 选左侧模块，例如「搜作品」
+2. 填条件：关键词、数量、排序；展开的次级条件可筛发布时间、时长、类型
+3. 点「扫描 / 拉取」，等待进度条走完
+4. 下方出现卡片预览，勾选需要的条目（可全选、也可在结果内搜标题/作者）
+5. 点「保存所选」；导出方式在「导出选项」里选：
+   - `Excel + 媒体`（默认）
+   - `仅 Excel / JSON`
+   - `仅媒体`
+6. 完成后点右上角下载链接，或到「本地档案」里下载历史文件
+
+评论区模块额外支持结果内筛选：仅意向、仅认证、按属地、性别、关键词过滤。
+
+### 直播监听
+
+左侧「直播间」→ 粘贴直播间链接或房间号 →「开始监听」。中间是实时消息流，可按弹幕/礼物/进场/点赞/PK 过滤；右侧是 PK 榜和贡献榜；「导出 Excel」保存本次记录。
+
+### Agent 配置
+
+「Agent 配置」页只做策略保存，不会真的自动发内容。流程是：
+
+1. 填品类、日产量、承接方式、今日目标
+2. 在「能力开关」里打开需要的能力（默认全关）
+3. 「预览计划」→ 生成只读步骤，进入「确认队列」
+4. 逐条批准 → 跑只读准备 → 生成草稿 → 确认后才真实发评论
+
+私信、发布视频目前未接入。开私信必须同时开「人工确认」。
+
+---
+
+## 目录结构
+
 ```
-# 数据爬取
+.
+├── webapp/                 # Web 工作台
+│   ├── server.py           # FastAPI 入口（python -m webapp.server）
+│   ├── templates/          # 页面模板
+│   ├── static/             # app.css / app.js
+│   ├── agent_*.py          # Agent 策略、计划、队列、执行
+│   └── live_feed.py        # 直播监听会话
+├── dy_apis/                # 抖音接口封装
+├── dy_live/                # 直播 WebSocket 与 protobuf
+├── builder/                # 请求签名、Header 构造
+├── utils/                  # Cookie、代理、指纹、签名、下载
+├── tests/                  # 单元测试
+├── datas/                  # 运行时数据（不入库）
+│   ├── media_datas/        # 视频与图片
+│   ├── excel_datas/        # 导出的 xlsx / json
+│   ├── agent_config.json
+│   └── agent_queue.json
+├── main.py                 # 命令行模式入口
+├── start_web.bat / .ps1    # 一键启动
+└── .env                    # 本地凭证（不入库）
+```
+
+## 命令行模式
+
+不想开 Web 界面，也可以直接改 `main.py` 末尾的 `__main__` 块跑：
+
+```bash
 python main.py
-
-# 直播间监听（弹幕 / 礼物 / 点赞等）
-python -m dy_live.server <LIVE_ID>
-
-# 抖音私信实时接收
-python dy_apis/douyin_recv_msg.py
-
-# 创作者中心快速发布图集 / 视频（先修改文件顶部的“用户配置”）
-python quick_publish.py
 ```
 
-### 🗝️注意事项
-- `main.py` 是爬虫入口，可根据需求自行修改调用
-- `dy_apis/douyin_api.py` 包含全部 API 接口封装，含直播间点赞、发消息、私信收发等
-- `dy_live/server.py` 包含直播间 WebSocket 监听逻辑
-- `dy_apis/douyin_recv_msg.py` 包含抖音私信 WebSocket 实时接收逻辑
-- `dy_apis/douyin_creator_api.py` 包含创作者中心上传 / 发布作品接口
-- `dy_apis/login_api.py` 包含扫码、手机号验证码登录逻辑
-- `dy_live/pk.py` 包含直播间 PK 事件解析
+默认跑一次关键词搜索示例（只读，不下载媒体以外的写操作）。按注释切换：
 
+- 作品链接批量采集
+- 用户全部作品采集
+- 私信发送（默认注释掉，避免误发）
 
-## 🍥日志
+## 数据保存位置
 
-| 日期       | 说明                                   |
-| -------- | ------------------------------------ |
-| 23/10/05 | - 项目完成。 |
-| 23/10/17 | - 首次提交。 |
-| 23/10/18 | - 监听直播间弹幕和礼物。 |
-| 23/10/21 | - 新增搜索智能排序和限制时间。 |
-| 23/10/21 | - 新增可视化界面到release v1.1.0。 |
-| 23/10/25 | - 新增issue提出的输出直播间消息时包括用户等级。 |
-| 23/10/28 | - 遇到验证码请手动点击！Fix Some Bugs。 |
-| 23/11/11 | - 修复了很多很多大家的bug~~，关于v.dy格式的url正在处理 |
-| 23/12/22 | - 修复了直播间监控 |
-| 25/06/07 | - 开放所有之前闭源的代码，包括数据爬取和直播间监听 |
-| 26/04/09 | - 修复直播间礼物信息接收（含送礼对象）；新增直播间点赞、直播间发弹幕；新增抖音私信实时接收（WebSocket）与主动发送功能 |
-| 26/07/26 | - 签名算法全部改为纯 Python 实现，主流程不再依赖 Node.js；私信支持浏览器登录 |
-| 26/08/30 | - 新增创作者中心发布图集 / 视频；新增扫码、手机号验证码登录 |
-| 26/09/13 | - 新增直播间贡献榜接口 |
-| 26/09/19 | - 新增直播间 PK 排行榜接口与 PK 实时事件监听 |
-| 26/09/20 | - 对齐直播间弹幕发送与作品评论发布接口 |
-| 26/09/27 | - 修复视频下载（CDN 需带 Referer，之前会把 403 页面存成 mp4）；单个作品下载失败时跳过，不再中断整批 |
+| 内容 | 路径 |
+| --- | --- |
+| 视频 / 图片 / 封面 | `datas/media_datas/<作者>/` |
+| Excel / JSON | `datas/excel_datas/` |
+| Agent 策略与队列 | `datas/agent_config.json`、`agent_queue.json` |
 
-## 🤝 欢迎贡献 PR
+## 常见问题
 
-本项目欢迎任何形式的贡献！如果你有新功能想法、Bug 修复或文档改进，欢迎提交 PR。
+**启动失败，提示端口被占用**
+`start_web.bat` 会自动结束占用进程；手动启动时换个端口：`DY_WEB_PORT=8080`。
 
-- Fork 本仓库并在新分支上开发
-- 保持代码风格与现有代码一致
-- PR 描述中请简要说明改动内容和目的
-- 也欢迎通过 [Issue](https://github.com/cv-cat/DouYin_Spider/issues) 提出建议或报告问题
+**模块导入报 `runtime_version`**
+protobuf 被降级了。执行 `pip install "protobuf>=5.27"` 后再启动。
 
-## 🧸额外说明
-1. 感谢star⭐和follow📰！不时更新
-2. 作者的联系方式在主页里，有问题可以随时联系我
-3. 可以关注下作者的其他项目，欢迎 PR 和 issue
-4. 感谢赞助！如果此项目对您有帮助，请作者喝一杯奶茶~~ （开心一整天😊😊）
-5. thank you~~~
+**采集一直空结果 / 频繁失败**
+按顺序检查：Cookie 是否过期 → 代理是否可用 → 指纹是否与 Cookie 来源浏览器一致 → 是否请求太频繁（调低数量、放慢节奏）。
 
-<div align="center">
-  <img src="./author/wx_pay.png" width="400px" alt="微信赞赏码"> 
-  <img src="./author/zfb_pay.jpg" width="400px" alt="支付宝收款码">
-</div>
+**扫码后状态仍是未就绪**
+点「保存并重载会话」让服务重新加载 `.env`；仍不行就重启服务。
 
+**下载按钮没反应**
+确认导出文件确实生成在 `datas/excel_datas/`，并在「本地档案」页刷新一次。
 
-| 优先级 | 字段                             | 说明                                                         |
-| :----- | :------------------------------- | :----------------------------------------------------------- |
-| 必留   | `cookie:` 整行                   | 尤其 `sessionid`、`ttwid`、`UIFID`、`sid_guard`、`bd_ticket_guard_*` |
-| 必留   | `user-agent`                     | 与浏览器一致                                                 |
-| 必留   | URL 查询参数                     | `screen_width/height`、`cpu_core_num`、`device_memory`、`browser_version` |
-| 建议   | `verifyFp` / `fp`                | 没有 `s_v_web_id` 时会自动补上                               |
-| 可丢   | `msToken`、`a_bogus`             | 每次请求现算，粘了也没用                                     |
-| 可丢   | `x-secsdk-csrf-token: DOWNGRADE` | 不是配置项                                                   |
-| 可丢   | 接口路径本身                     | 任意已登录请求都行                                           |
+## 免责声明
 
-### 配置页
-
-
-
-## 🍔 交流群
-
-如果你对爬虫和 AI Agent 感兴趣，可以加入群聊一起讨论~
-
-ps: 请加群，人满或者过期 issue | wx 提醒 | qq提醒
-
-| group-1 | group-2 | group-3 | group-4 (2000人qq群) |
-|:--:|:--:|:--:|:--:|
-| <img width="280" alt="group1" src="https://cvcat.site/assets/group1.jpg" /> | <img width="280" alt="group2" src="https://cvcat.site/assets/group2.jpg" /> | <img width="280" alt="group3" src="https://cvcat.site/assets/group3.jpg" /> | <img width="280" alt="group3" src="https://cvcat.site/assets/group4.jpg" /> |
-
-
-## 发布链二次验证（2026-10-17 逆向）
-
-`create_v2` 可能返回 `x-tt-verify-passport-decision` 要求二次验证（HTTP 200 空 body）：
-
-- **gateway_biz_verify**：`DYLoginApi` 可发起扫码二次验证闭环——
-  `get_qrcode` 参数 `aid=6383`（勿用 2906，回 4031）+ `scene=secondary_verify` +
-  `verify_scene=creator`，用户抖音 App 扫码后 `check_qrconnect` status=confirmed。
-- **gateway_web_authlv_check**：认证等级不足，扫码不够（需短信/人脸/密码）。
-  纯 HTTP 会话发码被 error_code=16 拒——建议用 cookie 导入（同设备已信任会话）。
-
-安全相关对齐基线（2026-10-17）：UA/sec-ch-ua Chrome 155、PASSPORT_SDK 3.4.9 族、
-dtrait 与真实设备逐字节一致、Cookie 头按浏览器 wire 顺序（`DouyinAuth.BROWSER_COOKIE_ORDER`）、
-creator 域 msToken 走 ms_appid=2906 独立通道。
+本项目仅用于个人学习与研究。采集到的数据、内容版权归原作者及平台所有，请遵守抖音用户协议与当地法律法规，不要用于商业倒卖、批量骚扰或任何侵害他人权益的行为。使用产生的风险由使用者自行承担。
