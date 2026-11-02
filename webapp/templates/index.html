@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>抖音采集工作台</title>
-  <link rel="stylesheet" href="/static/app.css?v=ui-polish1" />
+  <link rel="stylesheet" href="/static/app.css?v=ui-polish2" />
 </head>
 <body>
   <div class="app">
@@ -378,6 +378,18 @@
               </details>
             </div>
 
+            <form class="comment-composer" id="commentComposer" hidden>
+              <span class="composer-label" id="composerTarget">发表评论</span>
+              <div class="composer-row">
+                <textarea id="composerText" rows="2" maxlength="200" placeholder="写一条真实互动，别发硬广…" aria-label="评论内容"></textarea>
+                <button type="submit" class="btn btn-primary" id="composerSend">
+                  <span class="btn-label">发表</span>
+                  <span class="arrow" aria-hidden="true">→</span>
+                </button>
+              </div>
+              <p class="composer-msg" id="composerMsg" hidden></p>
+            </form>
+
             <div class="grid" id="resultGrid"></div>
             <div class="empty" id="emptyState">
               <p>还没有结果</p>
@@ -454,6 +466,6 @@
       </section>
     </div>
   </div>
-  <script src="/static/app.js?v=card-cover2"></script>
+  <script src="/static/app.js?v=action1"></script>
 </body>
 </html>

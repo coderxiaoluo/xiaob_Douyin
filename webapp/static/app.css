@@ -2385,3 +2385,172 @@ button.text-link {
     transform: none;
   }
 }
+
+/* ===== 卡片写操作：点赞 / 收藏 / 回复 ===== */
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-action {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.chip-action:hover,
+.chip-action:focus-visible {
+  outline: none;
+  border-color: var(--black);
+  background: var(--hover-bg);
+}
+
+.chip-action:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.chip-action:active {
+  transform: translateY(1px);
+}
+
+.chip-action.is-on {
+  background: var(--black);
+  border-color: var(--black);
+  color: var(--white);
+}
+
+.chip-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 卡片内的单条回复输入 */
+.reply-composer {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 4px;
+}
+.reply-composer[hidden] {
+  display: none;
+}
+
+.reply-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid var(--black);
+  border-radius: 0;
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 2px;
+}
+.reply-input::placeholder {
+  color: #a8a8a8;
+}
+.reply-input:focus {
+  outline: none;
+  border-bottom: 2px solid var(--red);
+  padding-bottom: 5px;
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* 评论区对当前作品自由输入 */
+.comment-composer {
+  border: 1px solid var(--black);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--white);
+}
+.comment-composer[hidden] {
+  display: none;
+}
+
+.composer-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.composer-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 8px;
+}
+
+.composer-row textarea {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  resize: vertical;
+  transition: border-color var(--dur) var(--ease);
+}
+.composer-row textarea::placeholder {
+  color: #a8a8a8;
+}
+.composer-row textarea:focus {
+  outline: none;
+  border-color: var(--red);
+}
+.composer-row .btn {
+  min-width: 96px;
+}
+
+.composer-msg {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.composer-msg.is-ok {
+  color: var(--black);
+}
+.composer-msg.is-error {
+  color: var(--red);
+}
+
+@media (max-width: 720px) {
+  .composer-row {
+    flex-direction: column;
+  }
+  .composer-row .btn {
+    width: 100%;
+  }
+  .reply-composer {
+    flex-wrap: wrap;
+  }
+}

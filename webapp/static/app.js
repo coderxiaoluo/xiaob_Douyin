@@ -64,6 +64,8 @@
   let currentScanJobId = "";
   let currentKind = "work";
   let viewMode = "work"; // work | config
+  let lastWorkUrl = ""; // 评论区发表/回复时回填目标作品
+  const actionState = new Map(); // "digg:123" / "collect:123" -> "0" | "1"
 
   function escapeHtml(s) {
     return String(s || "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
@@ -750,7 +752,10 @@
   }
 
   function cardHtml(item, i) {
-    const id = escapeHtml(item.id || item.work_id || String(i));
+    const rawId = String(item.id || item.work_id || i);
+    const id = escapeHtml(rawId);
+    const diggOn = actionState.get(`digg:${rawId}`) === "1";
+    const collectOn = actionState.get(`collect:${rawId}`) === "1";
     const kind = item.kind || currentKind;
     const time = fmtCardTime(item.create_time);
     if (kind === "work") {
@@ -785,6 +790,10 @@
             <span title="评论">评 ${fmtNum(item.comment_count)}</span>
             <span title="收藏">藏 ${fmtNum(item.collect_count)}</span>
             <span title="分享">转 ${fmtNum(item.share_count)}</span>
+          </div>
+          <div class="card-actions">
+            <button type="button" class="chip-action${diggOn ? " is-on" : ""}" data-act="digg" data-aweme="${id}" data-on="${diggOn ? "1" : "0"}" aria-pressed="${diggOn}">${diggOn ? "已赞" : "点赞"}</button>
+            <button type="button" class="chip-action${collectOn ? " is-on" : ""}" data-act="collect" data-aweme="${id}" data-on="${collectOn ? "1" : "0"}" aria-pressed="${collectOn}">${collectOn ? "已藏" : "收藏"}</button>
           </div>
           ${time ? `<time class="card-time" datetime="${escapeHtml(String(item.create_time))}">${escapeHtml(time)}</time>` : ""}
         </div>
@@ -866,6 +875,15 @@
               <span>回复 ${fmtNum(replyTotal)}</span>
               ${metaBits.map((b) => `<span>${b}</span>`).join("")}
             </div>
+            <div class="card-actions">
+              <button type="button" class="chip-action" data-act="reply" data-cid="${id}" data-nick="${name}">回复</button>
+            </div>
+            <form class="reply-composer" hidden>
+              <input type="text" class="reply-input" maxlength="200" placeholder="回复 @${name}…" aria-label="回复内容" />
+              <button type="submit" class="btn btn-primary btn-sm">
+                <span class="btn-label">发送</span>
+              </button>
+            </form>
           </div>
         </div>
         ${replies ? `<div class="reply-block"><div class="reply-head">回复线程 · ${escapeHtml(String((item.replies || []).length))}</div>${replies}</div>` : ""}
@@ -960,6 +978,15 @@
         $("#saveName").value = resultMeta.defaultName;
       }
       setSaveChoice(kind !== "work" ? "excel" : "all");
+    }
+    const composer = $("#commentComposer");
+    if (composer) {
+      const showComposer = kind === "comment" && !!lastWorkUrl;
+      composer.hidden = !showComposer;
+      if (showComposer) {
+        const wid = lastWorkUrl.split(/[/?]/).filter(Boolean).pop() || "";
+        $("#composerTarget").textContent = wid ? `对作品 ${wid} 发表评论` : "发表评论";
+      }
     }
     if (!list.length) {
       $("#resultGrid").innerHTML = "";
@@ -1381,6 +1408,7 @@
     if (body.urls) {
       body.urls = String(body.urls).split(/\n+/).map((s) => s.trim()).filter(Boolean);
     }
+    if (body.work_url) lastWorkUrl = String(body.work_url).trim();
     setBusy(true);
     try {
       const res = await fetch("/api/jobs/run", {
@@ -1394,6 +1422,120 @@
     } catch (err) {
       setBusy(false);
       alert(err.message || String(err));
+    }
+  });
+
+  async function postJson(url, payload) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || data.message || "操作失败");
+    return data;
+  }
+
+  // 作品卡片的点赞 / 收藏，评论卡片的回复展开
+  $("#resultGrid").addEventListener("click", async (e) => {
+    const btn = e.target.closest(".chip-action");
+    if (!btn) return;
+    const act = btn.dataset.act;
+
+    if (act === "reply") {
+      const box = btn.closest(".card")?.querySelector(".reply-composer");
+      if (!box) return;
+      box.hidden = !box.hidden;
+      if (!box.hidden) box.querySelector(".reply-input")?.focus();
+      return;
+    }
+
+    const aweme = btn.dataset.aweme || "";
+    if (!aweme) return;
+    const next = btn.dataset.on === "1" ? "0" : "1";
+    const url = act === "digg" ? "/api/action/digg" : "/api/action/collect";
+    btn.disabled = true;
+    try {
+      const data = await postJson(url, { aweme_id: aweme, action: next });
+      if (!data.ok) throw new Error(data.message || "操作失败");
+      actionState.set(`${act}:${aweme}`, next);
+      btn.dataset.on = next;
+      btn.classList.toggle("is-on", next === "1");
+      btn.setAttribute("aria-pressed", String(next === "1"));
+      btn.textContent = act === "digg"
+        ? (next === "1" ? "已赞" : "点赞")
+        : (next === "1" ? "已藏" : "收藏");
+    } catch (err) {
+      alert(err.message || String(err));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // 单条评论回复
+  $("#resultGrid").addEventListener("submit", async (e) => {
+    const form = e.target.closest(".reply-composer");
+    if (!form) return;
+    e.preventDefault();
+    const input = form.querySelector(".reply-input");
+    const content = String(input?.value || "").trim();
+    if (!content) return;
+    const trigger = form.closest(".card")?.querySelector('[data-act="reply"]');
+    const btn = form.querySelector("button");
+    btn.disabled = true;
+    try {
+      const data = await postJson("/api/action/comment", {
+        work_url: lastWorkUrl,
+        content,
+        reply_id: trigger?.dataset.cid || "",
+      });
+      if (!data.ok) throw new Error(data.message || "发布失败");
+      input.value = "";
+      form.hidden = true;
+      const label = btn.querySelector(".btn-label");
+      if (label) label.textContent = "已发送";
+      setTimeout(() => { if (label) label.textContent = "发送"; }, 2000);
+    } catch (err) {
+      alert(err.message || String(err));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // 评论区针对当前作品的自由输入
+  $("#commentComposer").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("#composerText");
+    const msg = $("#composerMsg");
+    const content = String(input.value || "").trim();
+    if (!content) {
+      msg.hidden = false;
+      msg.className = "composer-msg is-error";
+      msg.textContent = "评论内容不能为空";
+      return;
+    }
+    if (!lastWorkUrl) {
+      msg.hidden = false;
+      msg.className = "composer-msg is-error";
+      msg.textContent = "缺少目标作品，请先在评论区扫描一条作品链接";
+      return;
+    }
+    const btn = $("#composerSend");
+    btn.disabled = true;
+    msg.hidden = true;
+    try {
+      const data = await postJson("/api/action/comment", { work_url: lastWorkUrl, content });
+      if (!data.ok) throw new Error(data.message || "发布失败");
+      input.value = "";
+      msg.hidden = false;
+      msg.className = "composer-msg is-ok";
+      msg.textContent = data.message || "评论已发布";
+    } catch (err) {
+      msg.hidden = false;
+      msg.className = "composer-msg is-error";
+      msg.textContent = err.message || String(err);
+    } finally {
+      btn.disabled = false;
     }
   });
 

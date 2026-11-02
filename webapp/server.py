@@ -1300,6 +1300,91 @@ def api_config_save(body: ConfigBody):
     return status
 
 
+class ActionCommentBody(BaseModel):
+    aweme_id: str = ""
+    work_url: str = ""
+    content: str = ""
+    reply_id: str = ""
+
+
+class ActionDiggBody(BaseModel):
+    aweme_id: str = ""
+    work_url: str = ""
+    action: str = "1"
+
+
+class ActionCollectBody(BaseModel):
+    aweme_id: str = ""
+    work_url: str = ""
+    action: str = "1"
+
+
+def _action_auth():
+    """写操作要求已登录，否则底层只会返回空响应，排查成本很高。"""
+    auth, _ = _ensure_runtime()
+    cookie = getattr(auth, "cookie", None) or {}
+    if not cookie.get("sessionid"):
+        raise HTTPException(400, "未登录：请先在「会话配置」扫码或粘贴 Cookie")
+    return auth
+
+
+def _action_target(body) -> str:
+    target = (body.aweme_id or body.work_url or "").strip()
+    if not target:
+        raise HTTPException(400, "缺少作品 ID 或链接")
+    return target
+
+
+@app.post("/api/action/comment")
+def api_action_comment(body: ActionCommentBody):
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(400, "评论内容不能为空")
+    if len(content) > 200:
+        raise HTTPException(400, "评论最多 200 字")
+    target = _action_target(body)
+    auth = _action_auth()
+    try:
+        resp = DouyinAPI.publish_comment(
+            auth, target, content, reply_id=(body.reply_id or "").strip(),
+        )
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+    ok = isinstance(resp, dict) and resp.get("status_code") == 0
+    msg = "评论已发布" if ok else (
+        (resp or {}).get("status_msg") or (resp or {}).get("message") or "发布失败"
+    )
+    return {"ok": ok, "message": msg, "detail": resp}
+
+
+@app.post("/api/action/digg")
+def api_action_digg(body: ActionDiggBody):
+    action = "0" if str(body.action) == "0" else "1"
+    target = _action_target(body)
+    auth = _action_auth()
+    try:
+        ok = bool(DouyinAPI.digg(auth, target, action))
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+    label = "已点赞" if action == "1" else "已取消点赞"
+    return {"ok": ok, "message": label if ok else "操作失败", "action": action}
+
+
+@app.post("/api/action/collect")
+def api_action_collect(body: ActionCollectBody):
+    action = "0" if str(body.action) == "0" else "1"
+    target = _action_target(body)
+    auth = _action_auth()
+    try:
+        resp = DouyinAPI.collect_aweme(auth, target, action)
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+    ok = isinstance(resp, dict) and resp.get("status_code") == 0
+    label = "已收藏" if action == "1" else "已取消收藏"
+    msg = label if ok else ((resp or {}).get("status_msg") or "操作失败")
+    return {"ok": ok, "message": msg, "action": action}
+
+
 @app.get("/api/modules")
 def api_modules():
     return {"modules": MODULES}
