@@ -161,6 +161,7 @@
     $("#configNavBtn")?.classList.remove("active");
     $("#agentNavBtn")?.classList.remove("active");
     $("#archiveNavBtn")?.classList.remove("active");
+    $("#createNavBtn")?.classList.remove("active");
   }
 
   function hideAllViews() {
@@ -168,6 +169,7 @@
     $("#configView").hidden = true;
     $("#agentView").hidden = true;
     $("#liveView").hidden = true;
+    $("#createView").hidden = true;
     const archive = $("#archiveView");
     if (archive) archive.hidden = true;
   }
@@ -225,6 +227,20 @@
     openLowfreqNav();
     stopLivePoll();
     loadAgent().catch((e) => showAgentMsg(e.message || String(e), false));
+  }
+
+  function showCreateView() {
+    viewMode = "create";
+    hideAllViews();
+    $("#createView").hidden = false;
+    clearSideNavActive();
+    $("#createNavBtn")?.classList.add("active");
+    $$("#moduleNav button").forEach((b) => b.classList.remove("active"));
+    $("#moduleTitle").textContent = "私信 / 发布";
+    $("#moduleDesc").textContent = "建会话发私信 · STS 上传发布视频 · 素材库";
+    stopLivePoll();
+    toggleDmKind();
+    loadMedia(true).catch((err) => createMsg("mediaMsg", err.message || String(err), false));
   }
 
   const AGENT_TOOLS = ["gen_video", "gen_cover", "publish_video", "comment", "hot_reply", "dm_reply"];
@@ -1534,6 +1550,195 @@
       msg.hidden = false;
       msg.className = "composer-msg is-error";
       msg.textContent = err.message || String(err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ===== 私信 / 发布视频 / 素材库 =====
+  let mediaItems = [];
+  let mediaLoaded = false;
+
+  function createMsg(elId, text, ok) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.hidden = !text;
+    el.textContent = text || "";
+    el.classList.toggle("ok", !!ok);
+    el.classList.toggle("err", !ok);
+  }
+
+  function fmtSize(n) {
+    const size = Number(n) || 0;
+    if (size >= 1024 * 1024) return (size / 1024 / 1024).toFixed(1) + " MB";
+    if (size >= 1024) return Math.round(size / 1024) + " KB";
+    return size + " B";
+  }
+
+  function fillMediaSelect() {
+    const select = $("#dmMedia");
+    if (!select) return;
+    const kind = $("#dmKind")?.value || "text";
+    const usable = mediaItems.filter((item) => item.kind === kind);
+    const current = select.value;
+    select.innerHTML = `<option value="">选择素材</option>${usable.map((item) =>
+      `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}（${fmtSize(item.size)}）</option>`
+    ).join("")}`;
+    if (usable.some((item) => item.name === current)) select.value = current;
+  }
+
+  function renderMedia() {
+    const list = $("#mediaList");
+    const empty = $("#mediaEmpty");
+    if (!list) return;
+    if (!mediaItems.length) {
+      list.innerHTML = "";
+      empty.hidden = false;
+      fillMediaSelect();
+      return;
+    }
+    empty.hidden = true;
+    const KIND_LABEL = { image: "图片", video: "视频", file: "文件" };
+    list.innerHTML = mediaItems.map((item) => {
+      const label = KIND_LABEL[item.kind] || "文件";
+      const thumb = item.kind === "image"
+        ? `<img class="media-thumb" src="${escapeHtml(item.url)}" alt="" loading="lazy" />`
+        : `<span class="media-thumb media-thumb-kind">${label}</span>`;
+      return `<li class="media-item">
+        ${thumb}
+        <div class="media-meta">
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${label} · ${fmtSize(item.size)} · ${escapeHtml(fmtCardTime(item.mtime))}</span>
+        </div>
+        <a class="text-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">预览</a>
+      </li>`;
+    }).join("");
+    fillMediaSelect();
+  }
+
+  async function loadMedia(force = false) {
+    if (mediaLoaded && !force) return;
+    const res = await fetch("/api/media/list");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "素材列表加载失败");
+    mediaItems = data.items || [];
+    mediaLoaded = true;
+    renderMedia();
+  }
+
+  function toggleDmKind() {
+    const kind = $("#dmKind")?.value || "text";
+    const textField = $("#dmTextField");
+    const mediaField = $("#dmMediaField");
+    if (textField) textField.hidden = kind !== "text";
+    if (mediaField) mediaField.hidden = kind === "text";
+    fillMediaSelect();
+  }
+
+  async function uploadMediaFiles(files) {
+    const list = [...files];
+    if (!list.length) return;
+    const input = $("#mediaFileInput");
+    if (input) input.disabled = true;
+    try {
+      for (const file of list) {
+        createMsg("mediaMsg", `上传 ${file.name} …`, true);
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/media/upload", { method: "POST", body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || `上传 ${file.name} 失败`);
+      }
+      await loadMedia(true);
+      createMsg("mediaMsg", `已上传 ${list.length} 个文件`, true);
+    } catch (err) {
+      createMsg("mediaMsg", err.message || String(err), false);
+    } finally {
+      if (input) {
+        input.disabled = false;
+        input.value = "";
+      }
+    }
+  }
+
+  $("#createNavBtn")?.addEventListener("click", () => showCreateView());
+  $("#mediaRefreshBtn")?.addEventListener("click", () => {
+    loadMedia(true).catch((err) => createMsg("mediaMsg", err.message || String(err), false));
+  });
+  $("#mediaFileInput")?.addEventListener("change", (e) => uploadMediaFiles(e.target.files));
+  $("#dmKind")?.addEventListener("change", toggleDmKind);
+
+  $("#dmForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const kind = $("#dmKind").value;
+    const target = $("#dmTarget").value.trim();
+    const text = $("#dmText").value.trim();
+    const mediaName = $("#dmMedia").value;
+    if (!target) {
+      createMsg("dmMsg", "请填写目标用户链接或 uid", false);
+      return;
+    }
+    if (kind === "text" && !text) {
+      createMsg("dmMsg", "私信内容不能为空", false);
+      return;
+    }
+    if (kind !== "text" && !mediaName) {
+      createMsg("dmMsg", "请先在素材库上传并选择素材", false);
+      return;
+    }
+    const btn = $("#dmSendBtn");
+    btn.disabled = true;
+    createMsg("dmMsg", "发送中…", true);
+    try {
+      const data = await postJson("/api/create/dm", {
+        target, text, media_kind: kind, media_name: mediaName,
+      });
+      if (!data.ok) throw new Error(data.message || "发送失败");
+      createMsg("dmMsg", data.message || "私信已发送", true);
+    } catch (err) {
+      createMsg("dmMsg", err.message || String(err), false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("#publishCheckBtn")?.addEventListener("click", async () => {
+    createMsg("publishMsg", "检测中…", true);
+    try {
+      const res = await fetch("/api/create/publish/preflight");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "风控检测未通过");
+      createMsg("publishMsg", data.message || "发布安全凭据校验通过", true);
+    } catch (err) {
+      createMsg("publishMsg", err.message || String(err), false);
+    }
+  });
+
+  $("#publishForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const file = $("#publishFile").files[0];
+    if (!file) {
+      createMsg("publishMsg", "请选择视频文件", false);
+      return;
+    }
+    const btn = $("#publishBtn");
+    btn.disabled = true;
+    createMsg("publishMsg", "上传并发布中，视频较大时需要等几分钟…", true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("title", $("#publishTitle").value.trim());
+      form.append("desc", $("#publishDesc").value.trim());
+      form.append("visibility", $("#publishVisibility").value);
+      form.append("allow_download", $("#publishDownload").checked ? "true" : "false");
+      const res = await fetch("/api/create/publish", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "发布失败");
+      if (!data.ok) throw new Error(data.message || "发布失败");
+      createMsg("publishMsg", data.message || "发布成功", true);
+      loadMedia(true).catch(() => {});
+    } catch (err) {
+      createMsg("publishMsg", err.message || String(err), false);
     } finally {
       btn.disabled = false;
     }

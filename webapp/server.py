@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv, set_key
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -1383,6 +1383,226 @@ def api_action_collect(body: ActionCollectBody):
     label = "已收藏" if action == "1" else "已取消收藏"
     msg = label if ok else ((resp or {}).get("status_msg") or "操作失败")
     return {"ok": ok, "message": msg, "action": action}
+
+
+# ===== 素材库 =====
+MEDIA_UPLOAD_DIR = ROOT / "datas" / "media_uploads"
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+MEDIA_SUFFIX_KIND = {
+    ".jpg": "image", ".jpeg": "image", ".png": "image", ".webp": "image",
+    ".gif": "image", ".bmp": "image",
+    ".mp4": "video", ".mov": "video", ".avi": "video", ".mkv": "video",
+    ".webm": "video",
+}
+
+
+def _media_root() -> Path:
+    MEDIA_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    return MEDIA_UPLOAD_DIR
+
+
+def _media_kind(name: str) -> str:
+    return MEDIA_SUFFIX_KIND.get(Path(name).suffix.lower(), "file")
+
+
+def _media_public(name: str) -> dict:
+    stat = (_media_root() / name).stat()
+    return {
+        "name": name,
+        "size": stat.st_size,
+        "mtime": stat.st_mtime,
+        "kind": _media_kind(name),
+        "url": f"/api/media/preview/{name}",
+    }
+
+
+def _media_path(name: str) -> Path:
+    raw = (name or "").strip()
+    if not raw or "/" in raw or "\\" in raw or ".." in raw:
+        raise HTTPException(400, "非法素材名")
+    path = _media_root() / raw
+    if not path.is_file():
+        raise HTTPException(404, "素材不存在")
+    return path
+
+
+async def _save_upload(upload: UploadFile) -> dict:
+    original = Path(upload.filename or "file").name
+    stem = re.sub(r"[^\w\u4e00-\u9fa5.-]+", "_", Path(original).stem).strip("._") or "file"
+    suffix = Path(original).suffix.lower()
+    name = f"{stem[:48]}-{uuid.uuid4().hex[:8]}{suffix}"
+    path = _media_root() / name
+    size = 0
+    try:
+        with path.open("wb") as fh:
+            while True:
+                chunk = await upload.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(400, "文件超过 500MB 上限")
+                fh.write(chunk)
+    except HTTPException:
+        path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(400, f"保存素材失败: {exc}") from exc
+    finally:
+        await upload.close()
+    if size == 0:
+        path.unlink(missing_ok=True)
+        raise HTTPException(400, "文件为空")
+    return _media_public(name)
+
+
+@app.post("/api/media/upload")
+async def api_media_upload(file: UploadFile = File(...)):
+    return {"ok": True, "item": await _save_upload(file)}
+
+
+@app.get("/api/media/list")
+def api_media_list():
+    files = sorted(
+        (p for p in _media_root().iterdir() if p.is_file() and not p.name.startswith(".")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:60]
+    return {"ok": True, "items": [_media_public(p.name) for p in files]}
+
+
+@app.get("/api/media/preview/{name}")
+def api_media_preview(name: str):
+    return FileResponse(_media_path(name))
+
+
+# ===== 私信 =====
+class CreateDmBody(BaseModel):
+    target: str = ""
+    text: str = ""
+    media_name: str = ""
+    media_kind: str = "text"  # text | image | video | file
+
+
+def _dm_target_uid(auth, target: str) -> int:
+    if target.isdigit():
+        return int(target)
+    try:
+        uid, _sec, _nick, _referer = _resolve_user_ids(auth, target)
+    except Exception as exc:
+        raise HTTPException(400, f"目标用户解析失败：{exc}") from exc
+    return int(uid)
+
+
+@app.post("/api/create/dm")
+def api_create_dm(body: CreateDmBody):
+    target = (body.target or "").strip()
+    if not target:
+        raise HTTPException(400, "缺少目标用户（主页链接或 uid）")
+    kind = (body.media_kind or "text").strip().lower()
+    if kind not in {"text", "image", "video", "file"}:
+        raise HTTPException(400, f"不支持的私信类型: {kind}")
+    text = (body.text or "").strip()
+    if kind == "text" and not text:
+        raise HTTPException(400, "私信内容不能为空")
+    path = None
+    if kind != "text":
+        path = _media_path(body.media_name)
+        if _media_kind(path.name) != kind:
+            raise HTTPException(400, f"素材 {path.name} 不是 {kind} 类型")
+    auth = _action_auth()
+    uid = _dm_target_uid(auth, target)
+    try:
+        conversation_id, conversation_short_id, ticket = DouyinAPI.create_conversation(auth, uid)
+    except Exception as exc:
+        raise HTTPException(400, f"创建会话失败：{exc}") from exc
+    try:
+        if kind == "text":
+            ok = bool(DouyinAPI.send_msg(
+                auth, conversation_id, conversation_short_id, ticket, text,
+            ))
+        elif kind == "image":
+            ok = bool(DouyinAPI.send_image(
+                auth, conversation_id, conversation_short_id, ticket, str(path),
+            ))
+        elif kind == "video":
+            ok = bool(DouyinAPI.send_video(
+                auth, conversation_id, conversation_short_id, ticket, str(path),
+            ))
+        else:
+            ok = bool(DouyinAPI.send_file(
+                auth, conversation_id, conversation_short_id, ticket, str(path),
+            ))
+    except Exception as exc:
+        raise HTTPException(400, f"发送失败：{exc}") from exc
+    return {
+        "ok": ok,
+        "message": "私信已发送" if ok else "私信发送失败（接口未返回 OK）",
+        "conversation_id": conversation_id,
+        "media_kind": kind,
+    }
+
+
+# ===== 发布视频 =====
+@app.get("/api/create/publish/preflight")
+def api_publish_preflight():
+    """只做 create_v2 风控素材校验，不发送任何请求。"""
+    from dy_apis.douyin_creator_api import DouyinCreatorAPI
+
+    auth = _action_auth()
+    try:
+        DouyinCreatorAPI._require_publish_security(auth)
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "message": "发布安全凭据校验通过"}
+
+
+@app.post("/api/create/publish")
+async def api_create_publish(
+    file: UploadFile = File(...),
+    title: str = Form(""),
+    desc: str = Form(""),
+    visibility: int = Form(1),
+    allow_download: bool = Form(True),
+):
+    from dy_apis.douyin_creator_api import DouyinCreatorAPI
+
+    auth = _action_auth()
+    # 上传前先校验，避免几百 MB 视频白传一趟。
+    try:
+        DouyinCreatorAPI._require_publish_security(auth)
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    if MEDIA_SUFFIX_KIND.get(Path(file.filename or "").suffix.lower()) != "video":
+        raise HTTPException(400, "发布只接受视频文件（mp4/mov/avi/mkv/webm）")
+    title = (title or "").strip()
+    if len(title) > 20:
+        raise HTTPException(400, "标题最多 20 字")
+    desc = (desc or "").strip()
+    vis = int(visibility)
+    if vis not in (0, 1, 2):
+        raise HTTPException(400, "可见范围只能是 0 / 1 / 2")
+
+    item = await _save_upload(file)
+    path = _media_root() / item["name"]
+    try:
+        ok, msg, res_json = DouyinCreatorAPI.post_video(
+            auth, str(path),
+            title=title,
+            desc=desc,
+            visibility=vis,
+            allow_download=bool(allow_download),
+        )
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "ok": bool(ok),
+        "message": msg or ("发布成功" if ok else "发布失败"),
+        "media": item,
+        "detail": res_json,
+    }
 
 
 @app.get("/api/modules")
